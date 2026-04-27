@@ -2,9 +2,9 @@
 
 ## 定位
 
-Harness Hub 是一套通用、简洁、可复用的工程交付操作层。它不绑定具体技术栈、业务领域或 AI 工具，而是为软件开发任务提供稳定的工作方式：理解需求、建立上下文、设计方案、实施变更、验证结果、沉淀验收文档。
+Harness Hub 是一套通用、简洁、可复用的工程交付操作层。它不绑定具体技术栈、业务领域或工具实现，而是为软件开发任务提供稳定的工作方式：理解需求、建立上下文、设计方案、实施变更、验证结果、沉淀验收文档。
 
-`harness-hub/SKILL.md` 是 Codex 入口；`docs/harness/` 是长期工程规范；`harness-hub/references/` 是可复制的输出模板；`scripts/` 提供轻量自动化辅助。
+`SKILL.md` 是 CLI coding agent 的入口约定；`docs/harness/` 是长期工程规范；`references/` 是可复制的输出模板；`scripts/` 提供轻量自动化辅助。整个 `harness-hub/` 目录就是可安装、可迁移的 skill 单元。
 
 ## 设计原则
 
@@ -48,12 +48,11 @@ Harness Hub 不负责：
 6. **验证验收**：根据验证矩阵运行检查，记录证据、缺口和剩余风险。
 7. **交接沉淀**：复杂任务生成 `handoffs/<task-slug>.md`，交付总结面向下一位工程师可继续工作。
 
-## 与 AI 工具的关系
+## 与 CLI coding agent 的关系
 
-Harness Hub 的核心规范应独立于具体 AI 工具。Codex、Claude Code 或其他工具可以有各自 adapter，但共享同一套工程交付约定：
+Harness Hub 的核心规范应独立于具体工具实现。不同 CLI coding agent 可以有各自 adapter，但共享同一套工程交付约定：
 
 - 任务分级一致。
 - 角色契约一致。
 - 验证矩阵一致。
 - 计划和交接文档一致。
-
