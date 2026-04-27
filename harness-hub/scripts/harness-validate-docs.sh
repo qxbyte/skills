@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+skill_root="$(cd "$script_dir/.." && pwd)"
 failures=0
 
 check_headings() {
@@ -36,7 +38,7 @@ while IFS= read -r file; do
     failures=$((failures + 1))
   fi
 done <<EOF
-$(find docs harness-hub -name '*.md' -type f | sort)
+$(find "$skill_root" -name '*.md' ! -name 'harness-engineering-research.md' -type f | sort)
 EOF
 
 if [ "$failures" -gt 0 ]; then
