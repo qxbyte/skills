@@ -54,6 +54,40 @@
 - `harness-hub/references/`：技术方案、任务拆解、测试计划、PR 描述和交接文档模板。
 - `harness-hub/scripts/`：计划、交接和文档检查脚本。
 
+### spec-mode
+
+`spec-mode` 是 Kiro 风格的 Spec 工作流 skill，用于在 CLI Agent（如 Codex、Claude Code）中执行文件优先的规范化开发流程。它以 Markdown 文档作为唯一事实来源，在编码前完成需求确认、技术设计和任务拆分，并通过阶段门禁（phase gates）确保每个环节都经过审查。
+
+适合场景：
+
+- 功能开发或缺陷修复的规范化需求到交付流程。
+- 需要结构化文档（requirements.md / bugfix.md、design.md、tasks.md）来对齐需求、设计和实现。
+- 要求可追踪的验收标准（EARS）和任务执行状态。
+- 需要 Requirements-First、Design-First 或 Bugfix Spec 多种工作流。
+
+常用触发方式：
+
+```text
+/spec <需求或需求文档路径> [补充说明]
+/spec-mode <需求或需求文档路径> [补充说明]
+```
+
+示例：
+
+```text
+/spec 为 Markdown 编辑器增加撤销重做支持
+/spec-mode 修复登录接口 500，不能改变现有错误码
+/spec /absolute/path/to/requirement.md 使用 requirements-first
+```
+
+主要文件：
+
+- `spec-mode/SKILL.md`：skill 入口、Activation Guard、阶段门禁和核心行为约定。
+- `spec-mode/kiro-spec-mode-skill-design.md`：设计与落地文档，包含 Kiro 公开行为分析、可落地方案、推荐 Skill 包内容。
+- `spec-mode/references/`：完整工作流程、文档模板和 Kiro 样例分析。
+- `spec-mode/assets/templates/`：脚本初始化文档时使用的 Markdown 模板（requirements.md、bugfix.md、design.md、tasks.md）。
+- `spec-mode/scripts/`：spec 初始化（`spec_init.py`）、lint（`spec_lint.py`）、状态汇总（`spec_status.py`）和 CLI 选择器（`spec_choice.py`）。
+
 ## 本地检查
 
 修改 `harness-hub` 文档后，可以运行：
