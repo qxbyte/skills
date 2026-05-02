@@ -1,11 +1,11 @@
 ---
 name: spec-mode
-description: Kiro-style spec workflow for requirements, technical design, task lists, implementation, and acceptance. Use ONLY when the user explicitly invokes /spec or /spec-mode, or explicitly says to use spec mode. Do not use for ordinary coding, planning, requirements, design, or documentation requests unless spec mode is explicitly requested.
+description: Specification-driven workflow for requirements, technical design, task lists, implementation, and acceptance. Use ONLY when the user explicitly invokes /spec or /spec-mode, or explicitly says to use spec mode. Do not use for ordinary coding, planning, requirements, design, or documentation requests unless spec mode is explicitly requested.
 ---
 
 # Spec Mode
 
-Use this skill to run a Kiro-inspired specification workflow in CLI agents such as Codex and Claude Code. The workflow is file-first: generated Markdown documents are the source of truth, and coding starts only after requirements, design, and tasks are confirmed or explicitly skipped by the user.
+Use this skill to run a specification-driven workflow in CLI agents such as Codex and Claude Code. The workflow is file-first: generated Markdown documents are the source of truth, and coding starts only after requirements, design, and tasks are confirmed or explicitly skipped by the user.
 
 ## Activation Guard
 
@@ -105,7 +105,7 @@ Default root selection:
 2. Else if working inside a project, use `<current-project>/specs`.
 3. Else create and use `~/new project/specs`.
 
-Do not use `.kiro/specs` unless the user explicitly asks for Kiro-native output.
+Default to the user-provided document root. Do not create any tool-specific hidden directories.
 
 ## Workflow Selection
 
@@ -172,12 +172,12 @@ Before writing or executing a spec:
 1. Load the current user request and any requirement source document.
 2. Load existing documents from `<document-root>/<requirement-name>/` if present.
 3. Read project guidance files such as `AGENTS.md`, `CLAUDE.md`, README, package/build/test config, and relevant source files.
-4. If Kiro steering exists in `.kiro/steering/*.md`, use it as project context.
+4. Read project guidance files such as `CLAUDE.md`, `AGENTS.md`, or README when present.
 5. If facts are missing, ask the user when the answer affects the result. Only record an assumption when the user explicitly approves it or when it is harmless and clearly labeled.
 
 ## Document Style
 
-Mirror Kiro's generated structure:
+Use the following document structure:
 
 - Chinese document titles are acceptable when the user's requirement is Chinese.
 - `requirements.md` should include 简介, 词汇表, 需求, 用户故事, and EARS-style 验收标准.
@@ -228,4 +228,4 @@ Prefer the bundled scripts when useful:
 - `scripts/spec_status.py`: summarize phase status and pending/completed tasks.
 - `scripts/spec_choice.py`: show a terminal selector for workflow choice, document confirmation, and task execution confirmation.
 
-Read `references/workflow.md` for the full workflow, `references/templates.md` for document templates, and `references/kiro-sample-analysis.md` for the observed Kiro sample structure.
+Read `references/workflow.md` for the full workflow and `references/templates.md` for document templates.

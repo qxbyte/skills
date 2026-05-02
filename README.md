@@ -56,7 +56,7 @@
 
 ### spec-mode
 
-`spec-mode` 是 Kiro 风格的 Spec 工作流 skill，用于在 CLI Agent（如 Codex、Claude Code）中执行文件优先的规范化开发流程。它以 Markdown 文档作为唯一事实来源，在编码前完成需求确认、技术设计和任务拆分，并通过阶段门禁（phase gates）确保每个环节都经过审查。
+`spec-mode` 是规范化 Spec 工作流 skill，用于在 CLI Agent（如 Codex、Claude Code）中执行文件优先的规范化开发流程。它以 Markdown 文档作为唯一事实来源，在编码前完成需求确认、技术设计和任务拆分，并通过阶段门禁（phase gates）确保每个环节都经过审查。
 
 适合场景：
 
@@ -83,8 +83,8 @@
 主要文件：
 
 - `spec-mode/SKILL.md`：skill 入口、Activation Guard、阶段门禁和核心行为约定。
-- `spec-mode/kiro-spec-mode-skill-design.md`：设计与落地文档，包含 Kiro 公开行为分析、可落地方案、推荐 Skill 包内容。
-- `spec-mode/references/`：完整工作流程、文档模板和 Kiro 样例分析。
+- `spec-mode/spec-mode-skill-design.md`：设计与落地文档，包含可落地方案和推荐 Skill 包内容。
+- `spec-mode/references/`：完整工作流程和文档模板。
 - `spec-mode/assets/templates/`：脚本初始化文档时使用的 Markdown 模板（requirements.md、bugfix.md、design.md、tasks.md）。
 - `spec-mode/scripts/`：spec 初始化（`spec_init.py`）、lint（`spec_lint.py`）、状态汇总（`spec_status.py`）和 CLI 选择器（`spec_choice.py`）。
 

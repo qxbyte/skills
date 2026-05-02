@@ -58,7 +58,6 @@ coverage/
 # Local skill installation copies should not be vendored into this repo
 .codex/
 .claude/
-.kiro/skills/
 
 # Generated ad-hoc spec runs can be kept outside the repo.
 # Keep the curated project spec under specs/spec-mode-skill tracked.

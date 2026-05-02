@@ -7,7 +7,7 @@ Review Status: implemented
 
 ## 概述
 
-本实现计划将 Kiro-style Spec Mode Skill 拆分为文档入口、参考资料、模板、脚本、项目自举 spec 和验证几个部分。
+本实现计划将 Spec Mode Skill 拆分为文档入口、参考资料、模板、脚本、项目自举 spec 和验证几个部分。
 
 ## 任务
 
@@ -28,10 +28,9 @@ Review Status: implemented
     - 验证：人工检查
     - _需求：1、2、3、5_
 
-  - [x] 2.2 创建 Kiro 样例分析文档
-    - 研究 `/Users/xueqiang/Git/markdown/.kiro/specs/undo-redo-support`
-    - 记录 requirements/design/tasks/.config.kiro 的结构特点
-    - 文件：`references/kiro-sample-analysis.md`
+  - [x] 2.2 创建样例分析文档
+    - 记录 requirements/design/tasks/.config.json 的结构特点
+    - 文件：`references/sample-analysis.md`
     - 验证：人工检查
     - _需求：4_
 
@@ -155,7 +154,7 @@ Review Status: implemented
   - [x] 8.2 更新 skill 和参考文档中的目录规则
     - 文件：`SKILL.md`
     - 文件：`references/workflow.md`
-    - 文件：`references/kiro-sample-analysis.md`
+    - 文件：`references/sample-analysis.md`
     - 验证：人工检查
     - _需求：2_
 
@@ -221,8 +220,8 @@ Review Status: implemented
 
 - [x] Skill 可通过 `SKILL.md` 安装和触发。
 - [x] `/spec` 命令约定已写入 skill。
-- [x] 文档目录为当前项目 `specs/<具体需求名>/`，不使用 `.kiro`。
-- [x] 已参考 Kiro 样例文档结构。
+- [x] 文档目录为当前项目 `specs/<具体需求名>/`，不使用工具专属隐藏目录。
+- [x] 已确认 spec 文档结构规范。
 - [x] 已提供脚本辅助初始化、lint 和状态查看。
 - [x] 已提供 CLI 选择器辅助 workflow、文档确认和 task 执行确认。
 - [x] 已生成当前项目自身 spec 文档。

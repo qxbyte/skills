@@ -12,11 +12,11 @@ Review Status: implemented
 项目采用四层结构：
 
 1. `SKILL.md`：agent 触发入口和核心执行规则。
-2. `references/`：长流程说明、模板说明、Kiro 样例分析。
+2. `references/`：长流程说明、模板说明、样例分析。
 3. `assets/templates/`：脚本可使用的 Markdown 模板。
 4. `scripts/`：可执行辅助程序。
 
-生成的用户 spec 文档不放在 `.kiro/specs`，而是放在：
+生成的用户 spec 文档放在：
 
 ```text
 <document-root>/<requirement-name>/
@@ -31,11 +31,11 @@ Review Status: implemented
 ```text
 spec-mode/
 ├── SKILL.md
-├── kiro-spec-mode-skill-design.md
+├── spec-mode-skill-design.md
 ├── references/
 │   ├── workflow.md
 │   ├── templates.md
-│   └── kiro-sample-analysis.md
+│   └── sample-analysis.md
 ├── assets/
 │   └── templates/
 │       ├── requirements.md
@@ -98,7 +98,7 @@ User: /spec <需求或文档路径> [补充说明]
 - 明确目录规则：`<document-root>/<requirement-name>/`。
 - 明确默认根目录：当前项目 `specs/`，无项目时 `~/new project/specs`。
 - 明确 phase gates。
-- 明确 Kiro 风格文档结构。
+- 明确文档结构规范。
 - 指向脚本和 references。
 
 ### 2. `references/workflow.md`
@@ -112,15 +112,15 @@ User: /spec <需求或文档路径> [补充说明]
 - Requirements-first、Design-first、Bugfix 流程。
 - Task execution 和 acceptance 规则。
 
-### 3. `references/kiro-sample-analysis.md`
+### 3. `references/sample-analysis.md`
 
-**职责**：记录对 `/Users/xueqiang/Git/markdown/.kiro/specs/undo-redo-support` 样例的观察结论。
+**职责**：记录对样例 spec 结构的观察结论，供实现参考。
 
 **内容**：
 
-- Kiro 原生目录结构。
+- spec 目录结构。
 - `requirements.md`、`design.md`、`tasks.md` 的标题、章节和任务状态风格。
-- `.config.kiro` 到 portable `.config.json` 的映射。
+- `.config.json` 字段设计。
 
 ### 4. `assets/templates/*.md`
 
