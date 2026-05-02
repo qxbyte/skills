@@ -59,9 +59,7 @@ coverage/
 .codex/
 .claude/
 
-# Generated ad-hoc spec runs can be kept outside the repo.
-# Keep the curated project spec under specs/spec-mode-skill tracked.
-specs/*
-!specs/spec-mode-skill/
-!specs/spec-mode-skill/**
+# Generated spec runs and internal design docs are local artifacts, not tracked.
+specs/
+*-skill-design.md
 
