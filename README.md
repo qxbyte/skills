@@ -64,29 +64,49 @@
 - 需要结构化文档（requirements.md / bugfix.md、design.md、tasks.md）来对齐需求、设计和实现。
 - 要求可追踪的验收标准（EARS）和任务执行状态。
 - 需要 Requirements-First、Design-First 或 Bugfix Spec 多种工作流。
+- 需要跨会话持续迭代同一个需求，支持多窗口并行推进不同 spec。
 
-常用触发方式：
+命令说明：
 
-```text
-/spec <需求或需求文档路径> [补充说明]
-/spec-mode <需求或需求文档路径> [补充说明]
-```
+| 命令 | 说明 |
+|------|------|
+| `/spec <需求>` | **一次性模式**。执行完整的 requirements → design → tasks 结构化流程，不保留持续状态，对话结束后不跨会话继续。 |
+| `/spec-mode <需求>` | 同 `/spec`，别名入口。 |
+| `/spec --persist <需求>` | **持续模式**。创建 spec 文档并绑定当前会话，后续补充需求、调整设计、追加任务均自动落在同一个 spec 上。 |
+| `/spec-continue [spec名称]` | **恢复 spec**。从 spec 文档中加载上下文（当前阶段、未完成任务等），恢复跨会话记忆后继续迭代。不指定名称时列出所有可用 spec 供选择。 |
+| `/spec-status` | 查看当前 session 绑定的 spec、阶段、任务完成情况和 active pointer 状态。 |
+| `/spec-end` | 结束当前持续 session，从 active pointer 中移除该 session，不删除任何 spec 文档。 |
 
 示例：
 
 ```text
+# 一次性流程
 /spec 为 Markdown 编辑器增加撤销重做支持
 /spec-mode 修复登录接口 500，不能改变现有错误码
-/spec /absolute/path/to/requirement.md 使用 requirements-first
+
+# 持续模式：开启
+/spec --persist 为用户中心增加 OAuth2 登录
+
+# 持续模式：跨会话恢复
+/spec-continue oauth2-login
+
+# 持续模式：列出所有 spec 选择恢复
+/spec-continue
+
+# 退出持续模式
+/spec-end
 ```
 
 主要文件：
 
-- `spec-mode/SKILL.md`：skill 入口、Activation Guard、阶段门禁和核心行为约定。
-- `spec-mode/spec-mode-skill-design.md`：设计与落地文档，包含可落地方案和推荐 Skill 包内容。
-- `spec-mode/references/`：完整工作流程和文档模板。
+- `spec-mode/SKILL.md`：skill 入口、Activation Guard、命令集、阶段门禁、document-first 纪律和命令遵从规则。
+- `spec-mode/references/workflow.md`：完整工作流程、上下文加载协议、边界防污染规则。
 - `spec-mode/assets/templates/`：脚本初始化文档时使用的 Markdown 模板（requirements.md、bugfix.md、design.md、tasks.md）。
-- `spec-mode/scripts/`：spec 初始化（`spec_init.py`）、lint（`spec_lint.py`）、状态汇总（`spec_status.py`）和 CLI 选择器（`spec_choice.py`）。
+- `spec-mode/scripts/spec_session.py`：持续 session 生命周期管理（start / continue / status / end / list / load）。
+- `spec-mode/scripts/spec_init.py`：初始化 spec 目录结构和文档。
+- `spec-mode/scripts/spec_lint.py`：校验 spec 结构、session 状态和目录边界。
+- `spec-mode/scripts/spec_status.py`：输出 spec 阶段、session 状态和任务统计。
+- `spec-mode/scripts/spec_choice.py`：CLI 交互式选择器。
 
 ## 本地检查
 
