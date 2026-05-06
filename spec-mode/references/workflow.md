@@ -6,7 +6,13 @@ This reference expands the behavior required by `SKILL.md`.
 
 This workflow is opt-in only.
 
-Run it only when the user explicitly invokes `/spec`, `/spec-mode`, or clearly says to use spec mode. Do not infer spec mode from ordinary requests for coding, planning, design, requirements, documentation, bug fixing, or task lists.
+Run it when the user explicitly invokes `/spec`, `/spec-mode`, or clearly says to use spec mode. Do not infer spec mode from ordinary requests for coding, planning, design, requirements, documentation, bug fixing, or task lists.
+
+Hard rule: `/spec` and `/spec-mode` always activate the spec workflow, including requests to inspect, modify, or improve the `spec-mode` skill itself. Do not use the "modify the skill itself" case to skip requirements, design, tasks, or confirmation gates after an explicit spec command.
+
+Command compliance rule: when any standard spec command is triggered, the assistant must follow the corresponding workflow exactly. No phases, phase gates, or confirmation steps may be skipped for any reason — not because the requirement seems simple, the user appears to already know the design, or any other inferred justification. Commands are absolute. The assistant's judgment cannot override a command.
+
+Exception for non-command requests: if a persistent spec-mode session is already active for the current conversation/session, continue routing follow-up messages through spec-mode until the user ends that session.
 
 If the request does not explicitly activate spec mode, do not create a spec directory and do not run the phase-gated workflow.
 
@@ -17,6 +23,10 @@ Parse user input as:
 ```text
 /spec <requirement-or-path> [extra instructions]
 /spec-mode <requirement-or-path> [extra instructions]
+/spec --persist <requirement-or-path> [extra instructions]
+/spec-continue [spec-name-or-dir]
+/spec-status
+/spec-end
 ```
 
 Intake rules:
@@ -27,6 +37,78 @@ Intake rules:
 - If the user only gives a root directory and no requirement, ask for the requirement.
 - Do not invent missing scope, business rules, UI behavior, data fields, acceptance criteria, or validation commands. Ask for clarification when those details affect the resulting document.
 - If there are multiple unclear points, group them into a compact confirmation list and ask before generating the next document.
+
+Persistent command rules:
+
+- `/spec <requirement>` — one-shot mode. Runs the structured workflow without creating or updating `.active-spec-mode.json`.
+- `/spec --persist <requirement>` — persistent mode. Initializes the spec and starts an active session.
+- `/spec-continue [name]` — resumes or switches the current session to a spec and runs the mandatory context loading protocol. If no active pointer and no name is given, list all specs under the document root for the user to choose.
+- `/spec-status` — prints the current session, spec path, phase, task counts, and active pointer file.
+- `/spec-end` — ends only the current session and does not delete or modify other sessions.
+
+## 1.1 Persistent Session Model
+
+Persistent mode exists to support cross-session continuation and safe parallel specs. It is explicit and structured, not an implicit natural-language guess.
+
+State files:
+
+```text
+<document-root>/
+├── .active-spec-mode.json
+└── <requirement-name>/
+    ├── requirements.md or bugfix.md
+    ├── design.md
+    ├── tasks.md
+    └── .config.json
+```
+
+`.active-spec-mode.json` is keyed by `sessionId`, so multiple windows can work on different specs under the same document root:
+
+```json
+{
+  "version": 1,
+  "documentRoot": "/project/specs",
+  "updatedAt": "2026-05-06T00:00:00Z",
+  "sessions": {
+    "window-a": {
+      "sessionId": "window-a",
+      "specId": "uuid",
+      "specDir": "/project/specs/undo-redo",
+      "status": "active",
+      "currentPhase": "tasks"
+    }
+  }
+}
+```
+
+Each spec folder's `.config.json` stores its own lifecycle and session map. The active pointer and spec config must agree on `specId` before any document is loaded or edited.
+
+Boundary rules:
+
+1. A session can point to only one active spec at a time.
+2. Multiple sessions may point to the same spec only if the user intentionally chooses that.
+3. Switching a session never changes other sessions.
+4. Ending a session never deletes spec documents and never ends other sessions.
+5. Follow-up updates must touch only the selected spec folder.
+6. If `specId`, `documentRoot`, or `specDir` validation fails, stop before reading or editing spec documents.
+
+Use `scripts/spec_session.py` for lifecycle operations. Prefer simple defaults for single-window use; use explicit `--session` ids when multiple windows/specs are active.
+
+At the end of every assistant response while persistent mode is active, include this exact single-line footer — no variations:
+
+```
+─── spec-mode ─── spec: <slug> | session: <sessionId> | phase: <phase> | /spec-end 退出
+```
+
+When the user provides natural-language follow-up in an active persistent session, apply document-first discipline — write the document update before continuing discussion or implementation:
+
+- Requirement scope change → write `requirements.md` or `bugfix.md` first; then evaluate whether `design.md` and `tasks.md` need updates.
+- Technical strategy change → write `design.md` first; then evaluate task impact.
+- New work items → write to `tasks.md` first, preserving requirement traceability.
+- Execution requests → mark the task `[~]` in `tasks.md` before editing code; mark `[x]` only after validation.
+- Acceptance feedback → update task/review state in `tasks.md` inside the active spec only.
+
+Document-first is non-negotiable. If the user asks to skip writing and proceed directly, acknowledge the request, write the document first, then proceed.
 
 ## 2. Choice Prompt
 
@@ -109,6 +191,8 @@ The output root is a document management root. The actual spec directory is:
 <document-root>/<requirement-name>/
 ```
 
+Persistent mode also creates `<document-root>/.active-spec-mode.json`. This is a file, not a directory, and is the only hidden document-root state file used by this workflow.
+
 Default selection:
 
 1. Explicit root from user.
@@ -179,13 +263,15 @@ Requirement name slug rules:
 
 Before editing code:
 
-1. Load every file in the spec directory.
-2. Find target task or next pending required task.
-3. Update that task marker to `[~]`.
-4. Implement only the linked scope.
-5. Run validation.
-6. Mark `[x]` only when validation passes.
-7. If blocked, leave `[ ]` or `[~]` and add a note with the blocker.
+1. Resolve the selected spec directory from the command or active session.
+2. Validate `specId`, `documentRoot`, and `specDir` boundaries.
+3. Load every file in that spec directory only.
+4. Find target task or next pending required task.
+5. Update that task marker to `[~]`.
+6. Implement only the linked scope.
+7. Run validation.
+8. Mark `[x]` only when validation passes.
+9. If blocked, leave `[ ]` or `[~]` and add a note with the blocker.
 
 Task markers:
 
@@ -206,3 +292,35 @@ Final acceptance must include:
 - Validation commands and results.
 - Any skipped validation.
 - Remaining risks or open questions.
+- Persistent session footer when the session remains active, including `/spec-end`.
+
+## 9. /spec-continue Context Loading Protocol
+
+When the user triggers `/spec-continue`, the following steps are mandatory in order. None may be skipped.
+
+1. **Resolve target spec**: use the current session's active pointer from `.active-spec-mode.json`; if the user provided a name or path, use that; if neither exists, run `spec_session.py list --root <document-root>` and present the list.
+2. **Validate boundaries**: run `spec_session.py status` to confirm `specId` in the active pointer matches `.config.json`. If they differ, stop and report a boundary error.
+3. **Load documents**: run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
+4. **Present context**: display the loaded summary to the user before any other response:
+   ```
+   已加载 spec: <slug>
+     specId:  <id>
+     phase:   <phase>
+     session: <sessionId> (<status>)
+
+     <req-doc>     ← N 条验收标准  |  修改: <time>
+     design.md     ←               |  修改: <time>
+     tasks.md      ← N/M 已完成, P 待处理  |  修改: <time>
+   ```
+5. **Activate session**: run `spec_session.py continue <spec-dir> --session <id>` to update the active pointer.
+6. **Output footer** and await user instruction.
+
+## 10. Boundary Anti-contamination Rules
+
+Enforced by `scripts/spec_session.py` for every continue, switch, edit, and end operation:
+
+1. `specDir` must be inside `documentRoot`. Refuse if not.
+2. Active pointer `specId` must match `<spec-dir>/.config.json`. Refuse if not.
+3. Only files inside the selected spec folder are treated as active spec documents.
+4. Changes to one spec never update another spec's documents, config, task state, or active pointer entry.
+5. All writes to `.active-spec-mode.json` use atomic temp-file + `os.replace()` to prevent concurrent corruption.

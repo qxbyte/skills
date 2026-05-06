@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import spec_session
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / "assets" / "templates"
@@ -91,6 +93,14 @@ def main() -> int:
     parser.add_argument("--source-file", help="Path to a requirement source document.")
     parser.add_argument("--workflow", choices=["requirements-first", "design-first", "bugfix"], default="requirements-first")
     parser.add_argument("--spec-type", choices=["feature", "bugfix"], default="feature")
+    parser.add_argument("--persistent", action="store_true", help="Bind this spec to an active persistent session.")
+    parser.add_argument("--session", help="Window/thread/session id for persistent mode.")
+    parser.add_argument(
+        "--current-phase",
+        choices=sorted(spec_session.PHASES - {"ended"}),
+        default="intake",
+        help="Initial phase for persistent mode.",
+    )
     parser.add_argument("--force", action="store_true", help="Overwrite existing generated documents.")
     args = parser.parse_args()
 
@@ -135,12 +145,46 @@ def main() -> int:
         "sourceFile": str(Path(args.source_file).expanduser().resolve()) if args.source_file else None,
         "createdBy": "spec-mode",
         "createdAt": datetime.now(timezone.utc).isoformat(),
+        "persistentMode": False,
+        "sessionStatus": None,
+        "currentSessionId": None,
+        "currentPhase": None,
+        "lastActivityAt": None,
+        "endedAt": None,
+        "endedReason": None,
+        "sessions": {},
     }
     config_path = spec_dir / ".config.json"
     if write_if_missing(config_path, json.dumps(config, ensure_ascii=False, indent=2) + "\n", args.force):
         created.append(str(config_path))
 
-    print(json.dumps({"specDir": str(spec_dir), "created": created}, ensure_ascii=False, indent=2))
+    session: dict[str, object] | None = None
+    if args.persistent:
+        current_config = json.loads(config_path.read_text(encoding="utf-8"))
+        session_id = spec_session.normalize_session_id(args.session)
+        current_config = spec_session.update_config_session(
+            spec_dir,
+            current_config,
+            session_id,
+            "active",
+            args.current_phase,
+        )
+        active = spec_session.load_active(document_root)
+        active["sessions"][session_id] = spec_session.entry_for(
+            spec_dir,
+            current_config,
+            session_id,
+            args.current_phase,
+        )
+        spec_session.save_active(document_root, active)
+        session = {
+            "sessionId": session_id,
+            "status": "active",
+            "currentPhase": args.current_phase,
+            "activeFile": str(spec_session.active_path(document_root)),
+        }
+
+    print(json.dumps({"specDir": str(spec_dir), "created": created, "session": session}, ensure_ascii=False, indent=2))
     return 0
 
 
