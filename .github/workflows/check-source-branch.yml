@@ -1,0 +1,18 @@
+name: Check Source Branch
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  check-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify source branch is main
+        run: |
+          if [ "${{ github.head_ref }}" != "main" ]; then
+            echo "::error::Only 'main' branch is allowed to merge into 'master'."
+            echo "Source branch '${{ github.head_ref }}' is not permitted."
+            exit 1
+          fi
+          echo "Source branch check passed: '${{ github.head_ref }}' → master"
