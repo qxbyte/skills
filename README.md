@@ -76,6 +76,11 @@
 | `/spec-continue [spec名称]` | **恢复 spec**。从 spec 文档中加载上下文（当前阶段、未完成任务等），恢复跨会话记忆后继续迭代。不指定名称时列出所有可用 spec 供选择。 |
 | `/spec-status` | 查看当前 session 绑定的 spec、阶段、任务完成情况和 active pointer 状态。 |
 | `/spec-end` | 结束当前持续 session，从 active pointer 中移除该 session，不删除任何 spec 文档。 |
+| `/spec --set-vault <vault路径>` | 指定 Obsidian vault，spec 文档存入 `vault/spec-in/<os>-<user>/specs`。首次设置后写入 `~/.config/spec-mode/config.json`，后续自动使用。 |
+| `/spec --set-root <目录>` | 直接指定 spec 文档根目录（不经过 vault 子目录结构）。 |
+| `/spec --detect-vault` | 检测当前平台已安装的 Obsidian vault，未检测到时提示手动指定。 |
+| `/spec --vault-status` | 显示当前 vault / spec 根目录配置和解析来源。 |
+| `/spec -h` | 显示所有命令速查。 |
 
 示例：
 
@@ -95,13 +100,64 @@
 
 # 退出持续模式
 /spec-end
+
+# Obsidian 集成
+/spec --detect-vault
+/spec --set-vault ~/Documents/MyVault
+/spec --vault-status
 ```
+
+### Obsidian 集成
+
+spec-mode 支持将 spec 文档直接写入 Obsidian vault，跨平台可用（macOS / Windows / Linux）。
+
+**文档目录结构**
+
+同一个 vault 可被多平台、多用户共享（如通过 iCloud / OneDrive 同步），每台设备的 spec 独立存放，互不干扰：
+
+```text
+<vault>/
+└── spec-in/
+    ├── macos-alice/
+    │   └── specs/
+    │       └── <spec-name>/
+    │           ├── requirements.md
+    │           ├── design.md
+    │           ├── tasks.md
+    │           └── .config.json
+    ├── windows-bob/
+    │   └── specs/
+    └── linux-carol/
+        └── specs/
+```
+
+**根目录解析顺序**（高 → 低优先级）
+
+1. `/spec --root` 参数
+2. `SPEC_MODE_ROOT` 环境变量
+3. `~/.config/spec-mode/config.json`（首次检测时自动写入，或手动 `--set-vault` / `--set-root`）
+4. 自动检测 Obsidian vault → `vault/spec-in/<os>-<user>/specs`
+5. `<当前项目>/specs`
+6. `~/new project/specs`（兜底）
+
+**Obsidian 配置文件位置**（`spec_vault.py` 自动读取）
+
+| 平台 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/obsidian/obsidian.json` |
+| Windows | `%APPDATA%\obsidian\obsidian.json` |
+| Linux | `~/.config/obsidian/obsidian.json`（或 `$XDG_CONFIG_HOME`） |
+
+**跨会话说明**
+
+spec 创建后，`documentRoot` 存储在各 spec 的 `.config.json` 中。跨会话恢复（`/spec-continue`）直接读取该路径，不重新走 vault 检测流程。
 
 主要文件：
 
 - `spec-mode/SKILL.md`：skill 入口、Activation Guard、命令集、阶段门禁、document-first 纪律和命令遵从规则。
 - `spec-mode/references/workflow.md`：完整工作流程、上下文加载协议、边界防污染规则。
 - `spec-mode/assets/templates/`：脚本初始化文档时使用的 Markdown 模板（requirements.md、bugfix.md、design.md、tasks.md）。
+- `spec-mode/scripts/spec_vault.py`：跨平台 Obsidian vault 检测、根目录解析与配置管理。
 - `spec-mode/scripts/spec_session.py`：持续 session 生命周期管理（start / continue / status / end / list / load）。
 - `spec-mode/scripts/spec_init.py`：初始化 spec 目录结构和文档。
 - `spec-mode/scripts/spec_lint.py`：校验 spec 结构、session 状态和目录边界。

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import spec_session
+import spec_vault
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,15 +50,19 @@ def infer_name(text: str, explicit: str | None) -> tuple[str, str]:
     return words or slug, slug
 
 
-def resolve_document_root(root: str | None, project_dir: str | None) -> Path:
+def resolve_document_root(root: str | None, project_dir: str | None) -> tuple[Path, str]:
+    """Return (resolved_root, source_tag)."""
     if root:
-        return Path(root).expanduser().resolve()
+        return Path(root).expanduser().resolve(), "explicit"
+    vault_root, source = spec_vault.resolve_spec_root()
+    if vault_root is not None:
+        return vault_root, source
     if project_dir:
-        return Path(project_dir).expanduser().resolve() / "specs"
+        return Path(project_dir).expanduser().resolve() / "specs", "project"
     cwd = Path.cwd().resolve()
     if cwd != Path.home().resolve():
-        return cwd / "specs"
-    return Path.home().resolve() / "new project" / "specs"
+        return cwd / "specs", "project"
+    return Path.home().resolve() / "new project" / "specs", "default"
 
 
 def read_source(args: argparse.Namespace) -> str:
@@ -107,7 +112,7 @@ def main() -> int:
     source = read_source(args)
     name, slug = infer_name(source, args.name)
     spec_type = "bugfix" if args.workflow == "bugfix" else args.spec_type
-    document_root = resolve_document_root(args.root, args.project_dir)
+    document_root, root_source = resolve_document_root(args.root, args.project_dir)
     spec_dir = document_root / slug
     spec_dir.mkdir(parents=True, exist_ok=True)
 
@@ -184,7 +189,13 @@ def main() -> int:
             "activeFile": str(spec_session.active_path(document_root)),
         }
 
-    print(json.dumps({"specDir": str(spec_dir), "created": created, "session": session}, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "specDir": str(spec_dir),
+        "documentRoot": str(document_root),
+        "documentRootSource": root_source,
+        "created": created,
+        "session": session,
+    }, ensure_ascii=False, indent=2))
     return 0
 
 

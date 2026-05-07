@@ -238,3 +238,27 @@ Review Status: unreviewed
 - [ ] 未完成或跳过的 optional 任务已记录。
 - [ ] 用户确认验收。
 ```
+
+## Document Style
+
+### Document Section Structure
+
+- `requirements.md`: 简介, 词汇表, 需求, 用户故事, 验收标准
+- `design.md`: 概述, 架构, 组件与接口, 数据模型, 错误处理, 测试策略, 正确性属性, 风险
+- `tasks.md`: 概述, 任务（nested checkbox items, `_需求：..._` traceability, optional markers, checkpoint tasks）
+- `bugfix.md`: Current Behavior, Expected Behavior, Unchanged Behavior
+- Avoid "Assumptions" sections. Prefer "待确认问题" and ask before continuing.
+
+### EARS Acceptance Criteria Formats
+
+```text
+WHEN [condition/event], THE [system/component] SHALL [expected behavior].
+WHILE [state], THE [system/component] SHALL [expected behavior].
+IF [condition], THEN THE [system/component] SHALL [expected behavior].
+```
+
+For bugfix unchanged behavior:
+
+```text
+WHEN [condition], THE [system/component] SHALL CONTINUE TO [existing behavior].
+```
