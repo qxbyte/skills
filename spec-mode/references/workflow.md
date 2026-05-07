@@ -67,13 +67,13 @@ State files:
 ```json
 {
   "version": 1,
-  "documentRoot": "/project/specs",
+  "documentRoot": "<vault>/spec-in/<os>-<user>/specs",
   "updatedAt": "2026-05-06T00:00:00Z",
   "sessions": {
     "window-a": {
       "sessionId": "window-a",
       "specId": "uuid",
-      "specDir": "/project/specs/undo-redo",
+      "specDir": "<vault>/spec-in/<os>-<user>/specs/undo-redo",
       "status": "active",
       "currentPhase": "tasks"
     }
@@ -193,11 +193,14 @@ The output root is a document management root. The actual spec directory is:
 
 Persistent mode also creates `<document-root>/.active-spec-mode.json`. This is a file, not a directory, and is the only hidden document-root state file used by this workflow.
 
-Default selection:
+Default selection (resolved by `spec_vault.py`, priority high → low):
 
-1. Explicit root from user.
-2. Current project directory: `<cwd>/specs`.
-3. No project context: `~/new project/specs`.
+1. Explicit `--root` argument.
+2. `SPEC_MODE_ROOT` environment variable.
+3. `~/.config/spec-mode/config.json` → `obsidianRoot`.
+4. Auto-detected Obsidian vault → `<vault>/spec-in/<os>-<user>/specs`.
+5. Current project directory: `<cwd>/specs`.
+6. No project context: `~/new project/specs`.
 
 Requirement name slug rules:
 
@@ -324,3 +327,121 @@ Enforced by `scripts/spec_session.py` for every continue, switch, edit, and end 
 3. Only files inside the selected spec folder are treated as active spec documents.
 4. Changes to one spec never update another spec's documents, config, task state, or active pointer entry.
 5. All writes to `.active-spec-mode.json` use atomic temp-file + `os.replace()` to prevent concurrent corruption.
+
+## Interactive Selectors
+
+Run the following selector commands at each decision point. Use a TTY so the user can navigate with ↑/↓ and Enter; fall back to numbered choices if not interactive.
+
+**Workflow type selector** (before creating the first document):
+
+```text
+python3 scripts/spec_choice.py --title "What do you want to start with?" \
+  --option "Requirements::Begin by gathering and documenting requirements::recommended" \
+  --option "Technical Design::Begin with the technical design, then derive requirements" \
+  --option "Bugfix::Document current, expected, and unchanged behavior"
+```
+
+**Document confirmation selector** (after generating or updating each document — replace filename in title):
+
+```text
+python3 scripts/spec_choice.py --title "确认 requirements.md？" \
+  --option "确认::继续生成下一阶段文档::recommended" \
+  --option "查看全文::在聊天中展示完整文档" \
+  --option "继续沟通::先根据反馈修改当前文档"
+```
+
+**Task execution selector** (after tasks.md is confirmed):
+
+```text
+python3 scripts/spec_choice.py --title "是否开始执行 tasks？" \
+  --option "开始 required tasks::只执行必需任务::recommended" \
+  --option "开始 required + optional tasks::执行必需任务和可选任务" \
+  --option "暂不 coding::只保留文档，不开始实现"
+```
+
+## Persistent Sessions — Verification Checklist and Routing
+
+**Before continuing, switching, editing, or ending a persistent spec, verify all of the following:**
+
+1. The active pointer's `specId` matches `<spec-dir>/.config.json`.
+2. The `specDir` is inside the active pointer's `documentRoot`.
+3. Only files inside the selected spec folder are treated as the active spec documents.
+4. Changes to one spec never update another spec's documents, config, task state, or active pointer entry.
+
+**Natural-language follow-up routing in an active session:**
+
+| Intent | Action |
+|--------|--------|
+| Requirement change | Update `requirements.md` or `bugfix.md`, then check whether `design.md` and `tasks.md` are stale |
+| Design change | Update `design.md`, then check whether `tasks.md` is stale |
+| Task change | Update `tasks.md`, preserve `_需求：..._` traceability |
+| Execution request | Load only active spec's documents, execute selected or next pending task |
+| Acceptance feedback | Update task/review state, add regression or follow-up tasks if needed |
+
+## Context Loading for /spec-continue — Full Protocol
+
+When the user triggers `/spec-continue`, all six steps are mandatory and must not be skipped or silenced:
+
+1. Resolve the target spec using the first match found:
+   a. Spec name or path provided by the user.
+   b. Active pointer in `.active-spec-mode.json` for the current session.
+   c. Scan the document root for all subdirectories that contain a `.config.json` — these are all available specs, regardless of whether they were created in one-shot or persistent mode. Present the list and ask the user to choose.
+2. Validate `specId` consistency: read `.config.json` in the resolved spec dir. If an active pointer exists for this session, verify `specId` matches. If they differ, stop and report a boundary error — do not proceed. If no active pointer exists (e.g. one-shot spec), skip this check and proceed.
+3. Run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
+4. Present the loaded context to the user clearly:
+   ```
+   已加载 spec: <slug>
+     specId:  <id>
+     phase:   <phase>
+     session: <sessionId> (<status>)
+
+     <req-doc>     ← N 条验收标准  |  修改: <time>
+     design.md     ←               |  修改: <time>
+     tasks.md      ← N/M 已完成, P 待处理  |  修改: <time>
+   ```
+5. Activate the persistent session and output the footer.
+6. Only then respond to the user's actual request or await instructions.
+
+The spec documents are the cross-session memory; loading them is how continuity works.
+
+## Phase Gates — Detailed Sub-steps
+
+**Output order within each confirmation step (strictly follow this order):**
+
+1. Generate or update the document (write the file).
+2. **First:** show in the agent's text response — document path, concise summary, key changed points, unresolved questions.
+3. **Then:** show the confirmation options (try `spec_choice.py`; if it exits with code 2 due to non-interactive stdin, output the numbered options as plain text instead).
+4. **End the turn.** Do not continue to the next phase in the same response.
+
+The user's next reply drives the next action:
+
+- **"确认" / "1" / "confirm"** → proceed to the next phase.
+- **"查看全文" / "2"** → read and display the full document, then show confirmation options again. End the turn.
+- **"继续沟通" / "3" / any feedback** → update the document, show revised summary and options. End the turn.
+
+Full phase sequence:
+
+1. Generate or update `requirements.md` (feature) or `bugfix.md` (bugfix). Show summary + options. End turn. Wait for confirm.
+2. Only after Confirm: generate or update `design.md`. Show summary + options. End turn. Wait for confirm.
+3. Only after Confirm: generate or update `tasks.md`. Show summary + options. End turn. Wait for confirm.
+4. Only after Confirm: show task execution options (required only / required + optional / hold). End turn. Wait for choice.
+5. Only after explicit execution choice: begin coding tasks, validate, accept.
+
+Do not skip any confirmation turn. If the user asks for one-pass generation, still show paths, summaries, key changed points per document, and mark `Review Status: unreviewed`.
+
+## Implementation Execution — Full Steps
+
+1. Resolve and validate the active spec session if persistent mode is active.
+2. Load all spec files from the selected `<document-root>/<requirement-name>/`.
+3. Identify the selected task ID or next pending required task.
+4. Mark the task in `tasks.md` as in-progress using `[~]`.
+5. Make the smallest code change that satisfies the linked requirement.
+6. Run the validation command or the nearest relevant project test.
+7. Mark completed with `[x]` only after validation passes.
+8. If validation cannot run, keep the task incomplete and record the reason.
+9. Finish with an acceptance summary: changed files, completed tasks, validation result, remaining risks.
+
+**Task menu semantics:**
+- "Run all tasks" means execute required tasks only unless the user says to include optional tasks.
+- "Run required and optional tasks" includes optional tasks.
+- Stop at checkpoints if validation fails or user confirmation is needed.

@@ -45,7 +45,10 @@ def choose_numbered(title: str, options: list[Option], default: int) -> int:
     try:
         value = input(prompt).strip()
     except EOFError:
-        return max(default, 0)
+        # stdin is not a real terminal (e.g. Claude Code Bash tool).
+        # Refuse to auto-select — the agent must show options as text and wait for a real reply.
+        print("\n[spec-mode] 非交互环境：无法获取用户输入。请在对话中回复选项编号。", file=sys.stderr)
+        raise SystemExit(2)
     if not value and default >= 0:
         return default
     if value.isdigit():
