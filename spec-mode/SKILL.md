@@ -64,6 +64,19 @@ These rules trigger detectable signals (lint, `/spec-continue` ⚠ markers, veri
 
 If the text after `/spec` is an existing file path, read it as the requirement source; otherwise treat it as the requirement description.
 
+### Sub-flag Dispatch (execute and stop — do NOT trigger spec workflow)
+
+| Flag | Action |
+|---|---|
+| `--set-vault <path>` | Run `python3 scripts/spec_vault.py set --vault <path>`, show output, stop. |
+| `--set-root <path>` | Run `python3 scripts/spec_vault.py set --root <path>`, show output, stop. |
+| `--detect-vault` | Run `python3 scripts/spec_vault.py detect`, show output, stop. |
+| `--vault-status` | Run `python3 scripts/spec_vault.py get`, show output, stop. |
+| `-h` / `--help` | Output `references/help-output.md` verbatim, stop. |
+| `--persist <req>` | Initialize persistent session via `spec_init.py --persistent` and start workflow. |
+
+For any of the dispatch flags above (the first five rows), **do not** run intake, do not create a spec folder, do not enter Plan-mode. Just execute the indicated script and stop.
+
 **Optional spec name prefix.** If the requirement starts with `<名称>：<内容>` (full-width `：`) or `<名称>: <内容>` (ASCII `:` followed by a space), split on the first colon:
 
 - The part **before** the colon is the **spec folder name hint**. Agent derives a semantic English slug from the hint and passes `spec_init.py --name <slug> --requirement-name "<原名称>"`. The original hint is preserved as the displayed `requirementName` in `.config.json`.
