@@ -5,275 +5,210 @@ description: Specification-driven workflow for requirements, technical design, t
 
 # Spec Mode
 
-Use this skill to run a specification-driven workflow in CLI agents such as Codex and Claude Code. The workflow is file-first: generated Markdown documents are the source of truth, and coding starts only after requirements, design, and tasks are confirmed or explicitly skipped by the user.
+File-first specification-driven workflow for CLI agents (Codex, Claude Code). Generated Markdown documents are the source of truth; coding starts only after requirements, design, and tasks are confirmed.
 
 ## Activation Guard
 
-This skill is opt-in only.
+This skill is opt-in only. Activate **only** when the user's current message contains one of:
 
-Use this skill when the user's current request explicitly contains one of:
+- `/spec`, `/spec-mode`, `/spec-continue`, `/spec-status`, `/spec-end`
+- `/spec -h`, `/spec-mode -h`
+- `/spec --set-vault`, `/spec --set-root`, `/spec --detect-vault`, `/spec --vault-status`
+- `使用 spec 模式` / `启用 spec 模式` / `用 spec 模式` / `use spec mode`
 
-- `/spec`
-- `/spec-mode`
-- `/spec-continue`
-- `/spec-status`
-- `/spec-end`
-- `/spec -h`
-- `/spec-mode -h`
-- `/spec --set-vault`
-- `/spec --set-root`
-- `/spec --detect-vault`
-- `/spec --vault-status`
-- `使用 spec 模式`
-- `启用 spec 模式`
-- `用 spec 模式`
-- `use spec mode`
+**Hard rules:**
 
-Hard rule: `/spec` and `/spec-mode` always activate the spec workflow. This is true even when the requested work is to inspect, modify, or improve the `spec-mode` skill itself. Do not bypass requirements, design, tasks, review gates, or persistent-session handling after an explicit `/spec` or `/spec-mode` invocation.
+1. `/spec` and `/spec-mode` always activate the spec workflow — even when the requested work is to inspect or modify the `spec-mode` skill itself.
+2. **Command compliance**: when any spec command is triggered, follow the corresponding workflow exactly. Do not skip phases, phase gates, or confirmation steps for any reason. Commands are absolute; the assistant's judgment cannot override a command.
+3. **Persistent session exception**: if a persistent spec-mode session is active for the current conversation, route follow-up messages through this skill until the user runs `/spec-end`.
 
-Command compliance rule: when any standard spec command is triggered, follow the corresponding workflow exactly. Do not skip phases, phase gates, or confirmation steps for any reason — not because the requirement seems simple, the user appears to already know the design, the target is the skill itself, or any other inferred justification. Commands are absolute. The assistant's judgment cannot override a command.
+Do **not** activate for ordinary coding, planning, requirements, design, task lists, bugfixes, implementation, or documentation requests. In those cases, work normally — do not create spec folders.
 
-Exception for non-command requests: if the current conversation already has an active persistent spec-mode session, continue using this skill for follow-up messages until the user ends that session.
+## ⛔ Iron Rules — Top of Mind
 
-Do not use this skill when the user merely asks for normal coding, planning, requirement analysis, design docs, task lists, bug fixes, implementation, or documentation. In those cases, handle the request normally without creating spec folders or following the spec-mode phase gates.
+These rules are checked at **every turn** of every spec-mode session. Never violate them. Never defer them. If the user pushes back, acknowledge — then comply with the rule first, discuss after.
 
-If the user asks about this skill or asks to modify the skill itself without `/spec`, `/spec-mode`, or an active persistent session, you may edit the skill files normally. If the request includes `/spec` or `/spec-mode`, apply the spec workflow first.
+1. ⛔ **Document-first.** Any change to requirements / design / tasks discussed in chat MUST be written to the corresponding spec document **in the same turn**, *before* further discussion or implementation. Verbal-only changes are invisible to the next session and silently drift from the persisted spec.
 
-## Sessions
+2. ⛔ **Post-`/spec-continue` sync — 非常重要.** After `/spec-continue` you are resuming an **already-landed** spec. **Every** subsequent adjustment to requirements or design — even a single clarifying sentence from the user — MUST be reflected in `requirements.md` / `bugfix.md` / `design.md` / `tasks.md` and (for requirements changes) `acceptance-checklist.md`, **in the same turn**. Do not wait for "later", do not batch into "next round", do not say "I'll update it after the code". Write **now**. The user said it → write it. The next session can only see what was persisted; chat is ephemeral.
 
-**Every `/spec` invocation creates spec documents** (`requirements.md`, `design.md`, `tasks.md`, `.config.json`) that are permanently stored in the document root. All specs — regardless of how they were created — can be reopened and iterated via `/spec-continue`.
+3. ⛔ **acceptance-checklist follow-mode.** `requirements.md` or `bugfix.md` modified → rewrite `acceptance-checklist.md` in the **same turn**, derived from the new SHALL statements. Failure surfaces as `spec_lint.py` WARNING and `⚠ 落后于 requirements.md` on next `/spec-continue`.
 
-The difference between one-shot and persistent:
+4. ⛔ **Write-before-verify-lock.** Before any `Edit`/`Write` on a spec document, call `python3 scripts/spec_session.py verify-lock <spec-dir> --session <id>`. Returns `evicted` → stop work immediately and tell the user the spec was taken over by another session.
 
-| | One-shot `/spec` | Persistent `/spec --persist` |
-|--|-----------------|------------------------------|
-| **Session after task completion** | Ends — conversation returns to normal | **Stays active** — follow-up messages continue in spec-mode context |
-| **Post-completion iteration** | Not in-session (use `/spec-continue` to reopen) | Yes — user can refine requirements, update design, add tasks, re-execute, all within the same session |
-| **Status footer** | Not shown | Shown after every response — signals session is still active |
-| **Exit** | Automatic after completion | Explicit `/spec-end` required |
+5. ⛔ **Phase gate compliance.** No skipping confirmation steps. No auto-selecting at gates. No "this seems simple, let's skip ahead". Commands are absolute; the assistant's judgment cannot override them.
 
-The main purpose of `--persist` is to keep the session alive after task execution so the entire requirements → design → tasks → execution cycle can repeat continuously as the requirement evolves, without needing to reopen the spec each time.
+6. ⛔ **Forced writes.** Every config / document mutation must be persisted on the spot. When a write fails (IOError / permission / `lock_lost`), abort the operation — never continue with in-memory unpersisted state.
 
-The status footer is the visible signal that the session is still active:
+These rules trigger detectable signals (lint, `/spec-continue` ⚠ markers, verify-lock exit codes). Treat any of those signals as a regression on your part, not a tool quirk.
+
+## Command Entry
+
+```text
+/spec <requirement or path> [extras]            ← one-shot workflow
+/spec-mode <requirement or path> [extras]
+/spec --persist <requirement or path>           ← persistent session (shows footer)
+/spec-continue [spec-slug]                       ← resume / switch; multi-window aware
+/spec-status                                     ← show current session status
+/spec-end                                        ← end persistent session (docs preserved)
+
+/spec --set-vault <vault-path>                   ← set Obsidian vault → vault/spec-in/<os>-<user>/specs
+/spec --set-root <dir>                           ← set any directory as spec root
+/spec --detect-vault                             ← detect installed Obsidian vaults
+/spec --vault-status                             ← show current root + obsolete-location warnings
+
+/spec -h | /spec-mode -h                         ← help (output references/help-output.md verbatim, stop)
+```
+
+`--set-vault` / `--set-root` may be run **at any time** (no need to `/spec-end` first); the new value is written to `~/.config/spec-mode/config.json` immediately and used by all subsequent commands.
+
+If the text after `/spec` is an existing file path, read it as the requirement source; otherwise treat it as the requirement description.
+
+## Document Root Resolution (Iron Law)
+
+Three-tier resolution. **No project fallback, no home fallback.**
+
+1. `--root` argument or `SPEC_MODE_ROOT` env (highest)
+2. `~/.config/spec-mode/config.json` → `obsidianRoot` (set via `--set-vault`/`--set-root`; written automatically on first Obsidian detection)
+3. Auto-detect Obsidian vault → `<vault>/spec-in/<os>-<user>/specs` (and persist to config)
+
+**All three miss → hard stop**, output guidance and exit:
+
+```
+未检测到 Obsidian vault，且未配置 spec 根目录。请选择以下方式之一：
+  1. 安装 Obsidian 后重试（推荐）
+  2. /spec --set-vault <vault路径>
+  3. /spec --set-root <自定义目录>
+```
+
+`/spec` and `/spec-continue` use the **same** resolution. Never create `<project>/specs` or `~/new project/specs`.
+
+→ 详见 `references/obsidian.md`（vault 检测、目录树、多 vault 选择）
+
+## Sessions: One-shot vs Persistent
+
+Every `/spec` creates permanent documents (`requirements.md`, `design.md`, `tasks.md`, `acceptance-checklist.md`, `.config.json`). They can always be reopened via `/spec-continue`.
+
+| | one-shot `/spec` | `/spec --persist` |
+|--|--|--|
+| Session after task completion | Ends | Stays active |
+| Status footer | Not shown | Shown after every response |
+| Exit | Automatic | Explicit `/spec-end` |
+
+Persistent-mode footer (exact format, shown only in persistent mode):
 
 ```
 ─── spec-mode ─── spec: <slug> | session: <sessionId> | phase: <phase> | /spec-end 退出
 ```
 
-Only show this footer in persistent mode. Never show it in one-shot mode.
+When in read-only mode (see `references/lock-protocol.md`), append ` | [只读]` before `/spec-end 退出`.
 
-```text
-/spec <requirement or path>              ← one-shot
-/spec --persist <requirement or path>    ← persistent, shows footer
-/spec-continue [spec-name-or-dir]        ← reopen any spec for further iteration
-/spec-status                             ← show current session status
-/spec-end                                ← exit persistent session
-```
+`sessionId` resolution: `$TERM_SESSION_ID` → `$SPEC_SESSION_ID` → `"default"`. Each window must use a distinct sessionId for parallel work.
 
 State files:
 
-- `<spec-dir>/.config.json`: per-spec lifecycle, identity, sessions, phase, and review state. Created for every spec.
-- `<document-root>/.active-spec-mode.json`: active pointer for persistent sessions, keyed by `sessionId`. Only written in persistent mode.
+- `<spec-dir>/.config.json` — per-spec identity, lifecycle, **lock**, sessions, iteration round
+- `<document-root>/.active-spec-mode.json` — v2 window index keyed by sessionId (slug-only, no absolute paths)
 
-Never store active state only in chat memory. For multi-window or parallel specs, each window/thread must have a distinct `sessionId`; if none is available, use `default`.
+## Multi-Window + Lock (Iron Law)
 
-Use `scripts/spec_session.py` for lifecycle operations (start / continue / status / end / list / load).
+Different agent windows may work on **different** specs in parallel. The **same** spec is held by at most one session at a time via a write lock in its `.config.json`.
 
-→ 详见 references/workflow.md（验证检查清单、自然语言路由规则）
+**Before any spec document write**, perform three checks:
 
-## Output Language
+1. **specId**: active-pointer.specId == .config.json.specId
+2. **boundary**: spec_dir is inside documentRoot (`spec_session.ensure_within_root`)
+3. **lock**: `python3 scripts/spec_session.py verify-lock <spec-dir> --session <id>` returns `ok`
 
-All user-facing output — summaries, questions, confirmations, status messages, error prompts, and inline descriptions — must be written in **Chinese**. This applies regardless of which CLI tool runs this skill.
+Any failure → refuse the write, surface the error, do not silently continue.
 
-Exceptions (keep in English or original form):
-- Technical terms, command names, file paths, code identifiers, and proper nouns (e.g. `spec_choice.py`, `documentRoot`, `SKILL.md`, EARS, `[~]`).
-- Content inside code blocks.
-- The skill's own rule files (`SKILL.md`, `references/`).
+`/spec-continue <slug>` on a locked spec must offer three options to the user: 强制接管 / 只读查看 / 取消. Never auto-evict without user choice.
 
-If the user's requirement is written in English, generated spec documents may use English. All other agent output (summaries, phase prompts, confirmations) remains Chinese.
+Heartbeat: agent must call `python3 scripts/spec_session.py heartbeat <spec-dir>` before every Edit/Write on a spec document. Stale lock threshold: 30 minutes (`SPEC_MODE_LOCK_STALE_SECONDS` to override).
 
-## Confirmation First
-
-When this skill is active, minimize assumptions during requirement landing. If a missing detail affects scope, behavior, user experience, architecture, data, testing, acceptance, or task execution, ask the user instead of guessing.
-
-Use a selector when the client or terminal can support it. Prefer `scripts/spec_choice.py` for CLI selection:
-
-```text
-python3 scripts/spec_choice.py --title "What do you want to start with?" \
-  --option "Requirements::Begin by gathering and documenting requirements::recommended" \
-  --option "Technical Design::Begin with the technical design, then derive requirements" \
-  --option "Bugfix::Document current, expected, and unchanged behavior"
-```
-
-If the selector cannot run, present numbered choices and ask the user to reply with a number. Do not silently choose for the user unless the request is unambiguous.
-
-## Interactive Selectors
-
-For every decision point, run `scripts/spec_choice.py` in a TTY (↑/↓ and Enter); fall back to numbered choices if not interactive. Never replace confirmation points with a plain "please reply confirm" sentence unless tool execution is unavailable.
-
-→ 详见 references/workflow.md（三个完整 spec_choice.py 命令块）
-
-## Command Entry
-
-Trigger this skill when the user explicitly writes `/spec` or `/spec-mode`:
-
-```text
-/spec <requirement or path> [extra instructions]    ← one-shot workflow
-/spec-mode <requirement or path> [extra instructions]
-/spec --persist <requirement or path>               ← persistent session
-/spec-continue [spec-name-or-dir]                   ← resume session
-/spec-status                                        ← show session status
-/spec-end                                           ← end session
-```
-
-Obsidian / root configuration commands:
-
-```text
-/spec --set-vault <vault-path>      ← set Obsidian vault; spec root = vault/spec-in/<os>-<user>/specs
-/spec --set-root <dir>              ← set any directory as spec root directly
-/spec --detect-vault                ← detect installed Obsidian vaults
-/spec --vault-status                ← show current vault / spec root configuration
-```
-
-Help:
-
-```text
-/spec -h
-/spec-mode -h
-```
-
-When `--set-vault` or `--set-root` is given, call `spec_vault.py set` with the appropriate flag, show the result, and stop — do not start a spec workflow.
-
-When `--detect-vault` is given, run `python3 scripts/spec_vault.py detect` and show the output.
-
-When `--vault-status` is given, run `python3 scripts/spec_vault.py get` and show the output.
-
-When `-h` is given, output the help block defined in §Help Output and stop.
-
-If the text after `/spec` or `/spec-mode` is an existing file path, read that file as the requirement source. Otherwise treat it as the requirement description.
-
-`/spec-continue` reopens an existing spec from the configured spec document root recorded in `~/.config/spec-mode/config.json` (set by `/spec --set-vault` or `/spec --set-root`). It must not fall back to scanning the current project or `~/new project/specs`. When triggered, it loads and shows only the current spec status/context, then stops and waits for the user's next input. It must not begin implementation, run validation, or evaluate acceptance-checklist completion. If no spec name is given, list specs under the configured root and ask the user to choose. After loading, the session runs in persistent mode (footer shown). `/spec-end` ends only the current session and does not delete spec documents.
-
-## Output Directory
-
-The document root is resolved by `spec_init.py` with this priority:
-
-1. `--root` argument (explicit, highest priority).
-2. `SPEC_MODE_ROOT` environment variable.
-3. `~/.config/spec-mode/config.json` → `obsidianRoot` (written by `/spec --set-vault` or `/spec --set-root`).
-4. Auto-detected Obsidian vault → `<vault>/spec-in/<os>-<user>/specs`.
-5. `<current-project>/specs` if inside a project.
-6. `~/new project/specs` (fallback).
-
-When the root source is `project` or `default` (`documentRootSource` is not `env`/`config`/`obsidian`), notify the user:
-
-> 未检测到 Obsidian 配置，spec 文档将保存至 `<path>`。如需存入 Obsidian，请使用 `/spec --set-vault <vault路径>` 指定，或安装 Obsidian 后重试。
-
-Do not create tool-specific hidden directories. The only hidden file this skill may create at the document root is `.active-spec-mode.json`.
-
-→ 详见 references/obsidian.md（目录树结构、config.json 生命周期、跨会话路径读取）
-
-## Obsidian Integration
-
-Use `scripts/spec_vault.py` for vault detection and configuration (detect / set --vault / set --root / get).
-
-→ 详见 references/obsidian.md（平台路径表、多 vault 选择逻辑、命令参考）
-
-## Workflow Selection
-
-Before creating documents, classify the request:
-
-- Feature + behavior-first requirement -> Requirements-first, recommended.
-- Feature + architecture/design-first requirement -> Technical design first.
-- Bug report, regression, failing test, production defect -> Bugfix spec.
-
-If the choice materially affects the result, ask for input using a short selection prompt. In clients that support choice dialogs, present options similar to:
-
-- Requirements: Begin by gathering and documenting requirements. Recommended for behavior-first feature work.
-- Technical Design: Begin with the technical design, then derive requirements from that design.
-- Bugfix: Begin by documenting current behavior, expected behavior, and unchanged behavior.
-
-In plain CLI clients, ask a concise textual question and recommend Requirements unless the request is clearly design-first or bugfix. When possible, call `scripts/spec_choice.py` so the user can choose with number keys or arrow keys plus Enter.
+→ 详见 `references/lock-protocol.md`（5 个 lock 子命令、接管协议、只读模式、被驱逐窗口行为）
 
 ## Phase Gates
 
-Phase order (do not skip confirmation between phases):
+Phase order (no skipping confirmations):
 
-1. Requirements or bugfix.
-2. Confirm.
-3. Generate or update `design.md`.
-4. Confirm.
-5. Generate or update `tasks.md`.
-6. Confirm.
-7. Ask whether to execute tasks.
-8. Code, validate, accept.
+1. requirements (or bugfix)
+2. **Confirm**
+3. design
+4. **Confirm**
+5. tasks
+6. **Confirm**
+7. Ask whether to execute tasks
+8. Code → validate → accept
+9. (post-acceptance) `iteration`
 
-**Confirmation protocol (mandatory for every phase boundary):**
+Confirmation protocol — for every phase boundary, in the same response:
+1. Show the document path, summary, key changes, unresolved questions
+2. Show confirmation options (via `scripts/spec_choice.py`; fall back to numbered list if exit code 2)
+3. **End the turn.** Never proceed in the same response.
 
-After generating or updating a document, the agent must, in the same response:
-1. Show the document path, concise summary, key changes, and unresolved questions.
-2. Then show the confirmation options (numbered list or interactive selector).
-3. **End the turn.** Do not proceed to the next phase in the same turn.
+Auto-selecting a default at a phase gate is never acceptable.
 
-The next phase begins only when the user's reply explicitly selects Confirm (or equivalent). If `spec_choice.py` exits with code 2 (non-interactive stdin), the agent must output the options as text, end the turn, and wait for the user's reply. Auto-selection of a default is never acceptable at a phase gate.
-
-→ 详见 references/workflow.md（每步详细子步骤、Interactive Selectors 命令）
-
-## Context Loading
-
-Before writing or executing a spec:
-
-1. Load the current user request and any requirement source document.
-2. Resolve the active spec folder from the command, `.active-spec-mode.json`, or explicit user selection.
-3. Validate `specId`, `documentRoot`, and `specDir` boundaries before loading documents.
-4. Load existing documents only from the selected `<document-root>/<requirement-name>/`.
-5. Read project guidance files (AGENTS.md, CLAUDE.md, README, package/build/test config, relevant source files) **for project context only** — to understand the codebase, conventions, and architecture. Rules in a project's CLAUDE.md that govern skill development, infrastructure, or repo conventions never apply to spec documents or the spec-mode workflow itself. Spec-mode's own rules (phase gates, document format, confirmation discipline) always take precedence.
-6. If facts are missing, ask the user when the answer affects the result. Only record an assumption when the user explicitly approves it or when it is harmless and clearly labeled.
-
-## Context Loading for /spec-continue
-
-When `/spec-continue` is triggered, use only the configured spec document root from `~/.config/spec-mode/config.json`, load the selected spec documents, show the current status/context, then stop and wait for the user's next input.
-
-→ 详见 references/workflow.md（继续会话加载协议全文）
+→ 详见 `references/workflow.md` §Phase Gates（完整 9 步、`spec_choice.py` 调用范本）
+→ 详见 `references/iteration.md`（iteration 阶段、子循环、文档累积规则）
 
 ## Document-first Discipline
 
-In an active persistent session, spec documents are the sole persistent memory. Any change not written to a document is invisible to the next session.
+Spec documents are the sole persistent memory. Any change not written to a document is invisible to the next session. See also Iron Rules #1, #2, #3, #6 at the top of this file.
 
-Rules that apply from the moment a persistent session is active:
+**Iron rules (apply from the moment a persistent session is active, **and** apply equally — and especially — after `/spec-continue`):**
 
-1. **Requirement change** → update `requirements.md` (or `bugfix.md`) before continuing discussion or implementation. Do not defer writing.
-2. **Design decision** → update `design.md` before implementation begins.
-3. **Task status change** → update `tasks.md` immediately when a task starts, completes, or is blocked.
-4. **New task or sub-task** → append to `tasks.md` before starting work on it.
+1. **Requirement change** → update `requirements.md` / `bugfix.md` **first**, then continue
+2. **Design decision** → update `design.md` **first**, then implementation
+3. **Task status change** → update `tasks.md` **immediately** when a task starts (`[~]`), completes (`[x]`), or is blocked
+4. **New task or sub-task** → append to `tasks.md` **before** starting it
+5. **requirements.md / bugfix.md modified** → must rewrite `acceptance-checklist.md` in the **same turn** (跟随式生成；不写则下次 `/spec-continue` 显示 ⚠ 落后于 requirements.md)
+6. **Write-before-verify**: before any `Edit`/`Write` on a spec document, call `spec_session.py verify-lock`. EVICTED → stop work and tell the user.
+7. **Post-`/spec-continue` sync (非常重要)**: after `/spec-continue`, the spec docs are already landed. Any further requirement/design adjustment from the user (including verbal-only "顺便改一下…") MUST be applied to the landed `requirements.md` / `design.md` / `tasks.md` / `acceptance-checklist.md` **in the same turn it is raised**, before any code action. **Never** leave a chat-only change unwritten between turns — the next session will lose it. If multiple docs are affected by one change, update all of them in the same turn.
 
-These writes are non-negotiable. If the user asks to skip writing and just proceed, acknowledge the request, write the document update first, then proceed. The write comes first, always.
+These writes are non-negotiable. If the user asks to skip writing and proceed, acknowledge — then write first, proceed second. **Writes are forced**: if a write fails (IOError/permission), abort the operation; never continue with in-memory unpersisted state.
 
-## Document Style
+→ 详见 `references/workflow.md` §1.1（自然语言路由表）
 
-Chinese document titles are acceptable. Use EARS-style acceptance criteria. Avoid "Assumptions" sections — prefer "待确认问题". Every spec must include a fixed `acceptance-checklist.md` document that gives tester-operable verification steps and expected results for confirming the implemented requirement.
+## Workflow Selection
 
-→ 详见 references/templates.md（各文档节名结构、EARS 格式模板、验收操作清单模板）
+Classify the request before creating documents:
 
-## Implementation Execution
+- Feature, behavior-first → **Requirements-first** (recommended default)
+- Feature, architecture-first → **Technical Design first**
+- Bug / regression / failing test → **Bugfix**
 
-Mark tasks `[~]` in-progress before coding, `[x]` only after validation passes. Make the smallest change that satisfies the linked requirement. If validation cannot run, keep the task incomplete and record the reason.
+Use `scripts/spec_choice.py` when the workflow matters and is unclear; fall back to numbered choices if non-interactive. Never silently choose for the user.
 
-→ 详见 references/workflow.md（完整九步执行步骤、Task menu semantics）
+## Output Language
+
+All user-facing output (summaries, questions, confirmations, status, errors) — **Chinese**.
+
+Exceptions (English / original form):
+- Technical terms, command names, file paths, code identifiers
+- Content inside code blocks
+- Skill's own rule files (`SKILL.md`, `references/`)
+
+If the user's requirement is in English, generated spec documents may use English; other agent output (summaries, confirmations) stays Chinese.
 
 ## Helper Scripts
 
-Prefer the bundled scripts when useful:
-
-- `scripts/spec_init.py`: create the required directory structure and seed Markdown files from templates.
-- `scripts/spec_session.py`: start, continue, switch, list, status, and end persistent sessions with specId and document-root boundary checks.
-- `scripts/spec_vault.py`: detect Obsidian vaults, set/get spec document root, manage `~/.config/spec-mode/config.json`.
-- `scripts/spec_lint.py`: validate that a spec has the expected files, traceability, and task validation fields.
-- `scripts/spec_status.py`: summarize phase, session lifecycle, and pending/completed tasks.
-- `scripts/spec_choice.py`: show a terminal selector for workflow choice, document confirmation, and task execution confirmation.
-
-Read `references/workflow.md` for full workflow details, `references/templates.md` for document templates, `references/help-output.md` for the exact help text, and `references/obsidian.md` for Obsidian integration details.
+- `scripts/spec_init.py` — create spec directory; **requires `--name <slug>`** (agent generates the semantic slug)
+- `scripts/spec_session.py` — start / continue / status / end / list / list-specs / load / acquire / release / heartbeat / verify-lock / iterate
+- `scripts/spec_vault.py` — detect / set --vault / set --root / get
+- `scripts/spec_lint.py` — validate spec files (now also lock-field + checklist-staleness checks)
+- `scripts/spec_status.py` — task-progress view (thin wrapper over `spec_session.py load --json`)
+- `scripts/spec_choice.py` — interactive selector (TTY) with numbered fallback
 
 ## Help Output
 
-When `/spec -h` or `/spec-mode -h` is triggered, output exactly the block in `references/help-output.md` and stop (do not start a spec workflow).
+When `/spec -h` / `/spec-mode -h` is triggered, output exactly `references/help-output.md` and stop.
+
+## References
+
+- `references/workflow.md` — full phase protocol, interactive selector commands, `/spec-continue` context loading, EARS examples
+- `references/iteration.md` — iteration phase, sub-loop, document accumulation rules
+- `references/lock-protocol.md` — lock mechanism, takeover, read-only mode, eviction
+- `references/obsidian.md` — vault detection, directory tree, config.json lifecycle
+- `references/templates.md` — document templates and style conventions
+- `references/help-output.md` — verbatim help text

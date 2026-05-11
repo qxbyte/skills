@@ -3,28 +3,27 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import spec_session
-
-
-TASK_RE = re.compile(r"^\s*-\s*\[( |x|~|\*|-)\]\s+(.+)$", re.MULTILINE)
+from spec_session import TASK_RE, task_section
 
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def task_section(text: str) -> str:
-    start = text.find("## 任务")
-    if start == -1:
-        return text
-    tail = text[start:]
-    end_match = re.search(r"\n##\s+", tail[len("## 任务"):])
-    if not end_match:
-        return tail
-    return tail[: len("## 任务") + end_match.start()]
+def _placeholder_checklist_rows(text: str) -> list[str]:
+    """Return template placeholder rows still present in acceptance-checklist."""
+    findings: list[str] = []
+    placeholder_terms = ("核心能力", "异常输入", "回归行为", "_agent 待填充_")
+    for line in text.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        if any(term in line for term in placeholder_terms):
+            findings.append(line.strip())
+    return findings
 
 
 def lint(spec_dir: Path) -> list[str]:
@@ -87,6 +86,31 @@ def lint(spec_dir: Path) -> list[str]:
                     if phase not in spec_session.PHASES:
                         errors.append(f"Session {session_id} has invalid currentPhase: {phase}")
 
+            # Lock field structural check
+            lock = config_data.get("lock")
+            if lock is not None:
+                if not isinstance(lock, dict):
+                    errors.append(".config.json lock must be an object or null.")
+                else:
+                    for key in ("sessionId", "acquiredAt", "lastHeartbeatAt"):
+                        if not lock.get(key):
+                            errors.append(f".config.json lock is missing required field: {key}")
+                    # Stale lock advisory
+                    last_hb = lock.get("lastHeartbeatAt") or lock.get("acquiredAt")
+                    try:
+                        ts = datetime.fromisoformat(last_hb)
+                        elapsed = (datetime.now(timezone.utc) - ts).total_seconds()
+                        if elapsed > spec_session.LOCK_STALE_SECONDS:
+                            warnings.append(
+                                f".config.json lock has been stale for {int(elapsed)}s "
+                                f"(threshold {spec_session.LOCK_STALE_SECONDS}s); next acquire will reclaim it."
+                            )
+                    except (TypeError, ValueError):
+                        pass
+            evicted = config_data.get("evictedSessions")
+            if evicted is not None and not isinstance(evicted, list):
+                errors.append(".config.json evictedSessions must be a list.")
+
     first_doc = bug if bug.exists() else req
     if first_doc and first_doc.exists():
         text = read(first_doc)
@@ -125,6 +149,22 @@ def lint(spec_dir: Path) -> list[str]:
         for column in ["操作步骤", "预期结果", "实际结果", "结论"]:
             if column not in text:
                 warnings.append(f"acceptance-checklist.md is missing checklist column: {column}.")
+        placeholder_rows = _placeholder_checklist_rows(text)
+        if placeholder_rows:
+            warnings.append(
+                f"acceptance-checklist.md still contains {len(placeholder_rows)} placeholder row(s); "
+                "agent must replace them with rows derived from requirements.md SHALL statements."
+            )
+        # Mtime follow-mode check (P0-2): checklist should be no older than the
+        # source requirement document.
+        if first_doc and first_doc.exists():
+            checklist_ts = acceptance.stat().st_mtime
+            req_ts = first_doc.stat().st_mtime
+            if checklist_ts < req_ts - 1:
+                warnings.append(
+                    f"acceptance-checklist.md is older than {first_doc.name}. "
+                    "Per follow-mode rule, regenerate it in the same turn as the requirements update."
+                )
 
     return [f"ERROR: {item}" for item in errors] + [f"WARNING: {item}" for item in warnings]
 
