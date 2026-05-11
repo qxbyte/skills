@@ -152,7 +152,7 @@ When `-h` is given, output the help block defined in §Help Output and stop.
 
 If the text after `/spec` or `/spec-mode` is an existing file path, read that file as the requirement source. Otherwise treat it as the requirement description.
 
-`/spec-continue` reopens any spec — one-shot or persistent — for further iteration. It scans the document root for all spec folders (not just those with an active pointer). When triggered, it must run the context loading protocol (see §Context Loading for /spec-continue) before responding. If no spec name is given, list all specs under the document root and ask the user to choose. After loading, the session runs in persistent mode (footer shown). `/spec-end` ends only the current session and does not delete spec documents.
+`/spec-continue` reopens an existing spec from the configured spec document root recorded in `~/.config/spec-mode/config.json` (set by `/spec --set-vault` or `/spec --set-root`). It must not fall back to scanning the current project or `~/new project/specs`. When triggered, it loads and shows only the current spec status/context, then stops and waits for the user's next input. It must not begin implementation, run validation, or evaluate acceptance-checklist completion. If no spec name is given, list specs under the configured root and ask the user to choose. After loading, the session runs in persistent mode (footer shown). `/spec-end` ends only the current session and does not delete spec documents.
 
 ## Output Directory
 
@@ -232,9 +232,9 @@ Before writing or executing a spec:
 
 ## Context Loading for /spec-continue
 
-When `/spec-continue` is triggered, executing the full context loading protocol is mandatory — do not skip or silently omit any step.
+When `/spec-continue` is triggered, use only the configured spec document root from `~/.config/spec-mode/config.json`, load the selected spec documents, show the current status/context, then stop and wait for the user's next input.
 
-→ 详见 references/workflow.md（六步强制协议全文）
+→ 详见 references/workflow.md（继续会话加载协议全文）
 
 ## Document-first Discipline
 
@@ -251,9 +251,9 @@ These writes are non-negotiable. If the user asks to skip writing and just proce
 
 ## Document Style
 
-Chinese document titles are acceptable. Use EARS-style acceptance criteria. Avoid "Assumptions" sections — prefer "待确认问题".
+Chinese document titles are acceptable. Use EARS-style acceptance criteria. Avoid "Assumptions" sections — prefer "待确认问题". Every spec must include a fixed `acceptance-checklist.md` document that gives tester-operable verification steps and expected results for confirming the implemented requirement.
 
-→ 详见 references/templates.md（各文档节名结构、EARS 格式模板）
+→ 详见 references/templates.md（各文档节名结构、EARS 格式模板、验收操作清单模板）
 
 ## Implementation Execution
 
@@ -272,48 +272,8 @@ Prefer the bundled scripts when useful:
 - `scripts/spec_status.py`: summarize phase, session lifecycle, and pending/completed tasks.
 - `scripts/spec_choice.py`: show a terminal selector for workflow choice, document confirmation, and task execution confirmation.
 
-Read `references/workflow.md` for full workflow details, `references/templates.md` for document templates, and `references/obsidian.md` for Obsidian integration details.
+Read `references/workflow.md` for full workflow details, `references/templates.md` for document templates, `references/help-output.md` for the exact help text, and `references/obsidian.md` for Obsidian integration details.
 
 ## Help Output
 
-When `/spec -h` or `/spec-mode -h` is triggered, output exactly this block and stop (do not start a spec workflow):
-
-```
-spec-mode 命令速查
-══════════════════════════════════════════════════════
-
-工作流
-  /spec <需求描述或文件路径>            一次性规格工作流（需求→设计→任务）
-  /spec-mode <需求描述或文件路径>       同 /spec
-  /spec --persist <需求>               启动持久会话模式
-  /spec-continue [spec名或目录]         恢复或切换当前会话
-  /spec-status                          显示当前会话状态
-  /spec-end                             结束当前会话（不删除文档）
-
-Obsidian 集成
-  /spec --set-vault <vault路径>         设置 Obsidian vault（spec 存入 vault/spec-in/<os>-<user>/specs）
-  /spec --set-root <目录>               直接设置 spec 文档根目录（完全自定义路径）
-  /spec --detect-vault                  检测已安装的 Obsidian vault
-  /spec --vault-status                  显示当前 vault / spec root 配置
-
-帮助
-  /spec -h                              显示本帮助
-
-文档根目录解析顺序（高→低优先级）
-  1. /spec --root 参数
-  2. SPEC_MODE_ROOT 环境变量
-  3. ~/.config/spec-mode/config.json → obsidianRoot（首次检测时自动写入，或手动 --set-vault/--set-root）
-  4. 自动检测 Obsidian vault → <vault>/spec-in/<os>-<user>/specs（同时写入 config.json）
-  5. <当前项目>/specs
-  6. ~/new project/specs（兜底）
-
-spec 文档结构
-  <root>/<需求名>/requirements.md   需求与验收标准
-  <root>/<需求名>/bugfix.md         缺陷规格（替代 requirements.md）
-  <root>/<需求名>/design.md         技术设计
-  <root>/<需求名>/tasks.md          任务列表与执行状态
-  <root>/.active-spec-mode.json     跨会话活跃指针
-
-持久会话状态行格式
-  ─── spec-mode ─── spec: <slug> | session: <id> | phase: <phase> | /spec-end 退出
-```
+When `/spec -h` or `/spec-mode -h` is triggered, output exactly the block in `references/help-output.md` and stop (do not start a spec workflow).

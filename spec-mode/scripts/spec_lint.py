@@ -36,6 +36,7 @@ def lint(spec_dir: Path) -> list[str]:
     bug = spec_dir / "bugfix.md"
     design = spec_dir / "design.md"
     tasks = spec_dir / "tasks.md"
+    acceptance = spec_dir / "acceptance-checklist.md"
     config = spec_dir / ".config.json"
 
     if req.exists() and bug.exists():
@@ -46,6 +47,8 @@ def lint(spec_dir: Path) -> list[str]:
         errors.append("Missing design.md.")
     if not tasks.exists():
         errors.append("Missing tasks.md.")
+    if not acceptance.exists():
+        errors.append("Missing acceptance-checklist.md.")
     if not config.exists():
         warnings.append("Missing .config.json.")
     else:
@@ -113,6 +116,15 @@ def lint(spec_dir: Path) -> list[str]:
             warnings.append("tasks.md does not contain validation notes.")
         if "_需求：" not in section and "Requirements:" not in section and "Behavior:" not in section:
             warnings.append("tasks.md does not contain requirement traceability.")
+
+    if acceptance.exists():
+        text = read(acceptance)
+        for heading in ["## 前置条件", "## 验收步骤", "## 验收结论"]:
+            if heading not in text:
+                warnings.append(f"acceptance-checklist.md is missing {heading}.")
+        for column in ["操作步骤", "预期结果", "实际结果", "结论"]:
+            if column not in text:
+                warnings.append(f"acceptance-checklist.md is missing checklist column: {column}.")
 
     return [f"ERROR: {item}" for item in errors] + [f"WARNING: {item}" for item in warnings]
 
