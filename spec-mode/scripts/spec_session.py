@@ -206,6 +206,11 @@ def command_status(args: argparse.Namespace) -> int:
         document_root = document_root_for(spec_dir, config)
         ensure_within_root(spec_dir, document_root)
         entry = load_active(document_root).get("sessions", {}).get(session_id)
+        if entry and entry.get("specId") != config.get("specId"):
+            raise SystemExit(
+                f"Active pointer specId mismatch for session '{session_id}'. "
+                f"Refusing to report a different spec."
+            )
     else:
         if not args.root:
             raise SystemExit("status without spec_dir requires --root")
@@ -286,6 +291,60 @@ def command_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_list_specs(args: argparse.Namespace) -> int:
+    document_root = Path(args.root).expanduser().resolve()
+    if not document_root.exists():
+        raise SystemExit(f"Document root does not exist: {document_root}")
+
+    specs: list[dict[str, Any]] = []
+    for child in sorted(document_root.iterdir(), key=lambda item: item.name):
+        if not child.is_dir():
+            continue
+        config_path = child / ".config.json"
+        if not config_path.exists():
+            continue
+        try:
+            config = load_config(child)
+            ensure_within_root(child, document_root)
+        except SystemExit as exc:
+            specs.append({
+                "slug": child.name,
+                "specDir": str(child.resolve()),
+                "valid": False,
+                "error": str(exc),
+            })
+            continue
+        specs.append({
+            "slug": config.get("slug") or child.name,
+            "requirementName": config.get("requirementName"),
+            "specDir": str(child.resolve()),
+            "specId": config.get("specId"),
+            "workflowType": config.get("workflowType"),
+            "specType": config.get("specType"),
+            "currentPhase": config.get("currentPhase"),
+            "sessionStatus": config.get("sessionStatus"),
+            "lastActivityAt": config.get("lastActivityAt"),
+            "valid": True,
+        })
+
+    if args.json:
+        print(json.dumps({"documentRoot": str(document_root), "specs": specs}, ensure_ascii=False, indent=2))
+    else:
+        print(f"Document root: {document_root}")
+        if not specs:
+            print("No specs found.")
+            return 0
+        for spec in specs:
+            if spec.get("valid"):
+                print(
+                    f"- {spec.get('slug')}: {spec.get('requirementName') or spec.get('slug')} "
+                    f"({spec.get('currentPhase') or 'unknown'}, {spec.get('specDir')})"
+                )
+            else:
+                print(f"- {spec.get('slug')}: invalid ({spec.get('error')})")
+    return 0
+
+
 def command_load(args: argparse.Namespace) -> int:
     spec_dir = Path(args.spec_dir).expanduser().resolve()
     config = load_config(spec_dir)
@@ -302,6 +361,7 @@ def command_load(args: argparse.Namespace) -> int:
     bug_info = file_info(spec_dir / "bugfix.md")
     design_info = file_info(spec_dir / "design.md")
     tasks_info = file_info(spec_dir / "tasks.md")
+    acceptance_info = file_info(spec_dir / "acceptance-checklist.md")
 
     req_doc = req_info if req_info["exists"] else bug_info
     req_name = "requirements.md" if req_info["exists"] else "bugfix.md"
@@ -353,6 +413,10 @@ def command_load(args: argparse.Namespace) -> int:
                 "counts": counts,
                 "inProgress": in_progress,
             },
+            "acceptance-checklist.md": {
+                "exists": acceptance_info.get("exists", False),
+                "modifiedAt": acceptance_info.get("modifiedAt"),
+            },
         },
     }
 
@@ -387,6 +451,11 @@ def command_load(args: argparse.Namespace) -> int:
             print(f"  {'tasks.md':<22} ← {c['completed']}/{c['total']} 已完成, {c['pending']} 待处理{prog}  |  修改: {tasks_d['modifiedAt']}")
         else:
             print(f"  {'tasks.md':<22} ← 不存在")
+        acceptance_d = result["documents"]["acceptance-checklist.md"]
+        if acceptance_d["exists"]:
+            print(f"  {'acceptance-checklist.md':<22} ← 验收操作清单  |  修改: {acceptance_d['modifiedAt']}")
+        else:
+            print(f"  {'acceptance-checklist.md':<22} ← 不存在")
     return 0
 
 
@@ -425,6 +494,11 @@ def main() -> int:
     list_cmd.add_argument("--root", required=True)
     list_cmd.add_argument("--json", action="store_true")
     list_cmd.set_defaults(func=command_list)
+
+    list_specs_cmd = subparsers.add_parser("list-specs", help="List spec folders under a configured document root.")
+    list_specs_cmd.add_argument("--root", required=True)
+    list_specs_cmd.add_argument("--json", action="store_true")
+    list_specs_cmd.set_defaults(func=command_list_specs)
 
     load_cmd = subparsers.add_parser("load", help="Load and summarize spec documents for context restoration.")
     load_cmd.add_argument("spec_dir")

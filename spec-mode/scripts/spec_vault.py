@@ -116,6 +116,14 @@ def resolve_spec_root() -> tuple[Path | None, str]:
     return None, "not_found"
 
 
+def configured_spec_root() -> tuple[Path | None, str]:
+    """Return the spec root explicitly recorded by spec-mode config.json."""
+    cfg = read_config()
+    if cfg.get("obsidianRoot"):
+        return Path(cfg["obsidianRoot"]).expanduser().resolve(), "config"
+    return None, "not_found"
+
+
 def command_detect(args: argparse.Namespace) -> int:
     config_path = obsidian_config_path()
     vaults = read_vaults()
@@ -184,7 +192,10 @@ def command_set(args: argparse.Namespace) -> int:
 
 
 def command_get(args: argparse.Namespace) -> int:
-    root, source = resolve_spec_root()
+    if args.configured_only:
+        root, source = configured_spec_root()
+    else:
+        root, source = resolve_spec_root()
     cfg = read_config()
 
     if args.json:
@@ -233,6 +244,7 @@ def main() -> int:
 
     get_p = sub.add_parser("get", help="显示当前解析到的 spec 文档根目录。")
     get_p.add_argument("--json", action="store_true")
+    get_p.add_argument("--configured-only", action="store_true", help="只读取 spec-mode config.json 中记录的根目录，不自动检测或回退。")
     get_p.set_defaults(func=command_get)
 
     args = parser.parse_args()

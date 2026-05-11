@@ -42,7 +42,7 @@ Persistent command rules:
 
 - `/spec <requirement>` — one-shot mode. Runs the structured workflow without creating or updating `.active-spec-mode.json`.
 - `/spec --persist <requirement>` — persistent mode. Initializes the spec and starts an active session.
-- `/spec-continue [name]` — resumes or switches the current session to a spec and runs the mandatory context loading protocol. If no active pointer and no name is given, list all specs under the document root for the user to choose.
+- `/spec-continue [name]` — resumes or switches the current session to a spec from the configured spec root recorded in `~/.config/spec-mode/config.json`, then shows loaded status/context and waits for the user's next input. It does not run implementation, validation, or acceptance-checklist evaluation.
 - `/spec-status` — prints the current session, spec path, phase, task counts, and active pointer file.
 - `/spec-end` — ends only the current session and does not delete or modify other sessions.
 
@@ -59,6 +59,7 @@ State files:
     ├── requirements.md or bugfix.md
     ├── design.md
     ├── tasks.md
+    ├── acceptance-checklist.md
     └── .config.json
 ```
 
@@ -294,17 +295,19 @@ Final acceptance must include:
 - Tasks completed.
 - Validation commands and results.
 - Any skipped validation.
+- `acceptance-checklist.md` tester-operable steps and recorded results.
 - Remaining risks or open questions.
 - Persistent session footer when the session remains active, including `/spec-end`.
 
 ## 9. /spec-continue Context Loading Protocol
 
-When the user triggers `/spec-continue`, the following steps are mandatory in order. None may be skipped.
+When the user triggers `/spec-continue`, the following steps are mandatory in order. None may be skipped. This command is a load-and-report command only; after presenting current status/context, stop and wait for the user's next input.
 
-1. **Resolve target spec**: use the current session's active pointer from `.active-spec-mode.json`; if the user provided a name or path, use that; if neither exists, run `spec_session.py list --root <document-root>` and present the list.
-2. **Validate boundaries**: run `spec_session.py status` to confirm `specId` in the active pointer matches `.config.json`. If they differ, stop and report a boundary error.
-3. **Load documents**: run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
-4. **Present context**: display the loaded summary to the user before any other response:
+1. **Resolve configured root**: run `python3 scripts/spec_vault.py get --json --configured-only`. Use only the `specRoot` recorded in `~/.config/spec-mode/config.json`. If no configured root exists, stop and ask the user to run `/spec --set-vault <vault路径>` or `/spec --set-root <目录>`.
+2. **Resolve target spec**: within that configured root, use the current session's active pointer from `.active-spec-mode.json`; if the user provided a spec name, match it to a child spec directory under the configured root; if neither exists, run `python3 scripts/spec_session.py list-specs --root <configured-root>` and present the list.
+3. **Validate boundaries**: run `spec_session.py status` to confirm `specId` in the active pointer matches `.config.json`. If they differ, stop and report a boundary error.
+4. **Load documents**: run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
+5. **Present context**: display the loaded summary to the user before any other response:
    ```
    已加载 spec: <slug>
      specId:  <id>
@@ -314,9 +317,10 @@ When the user triggers `/spec-continue`, the following steps are mandatory in or
      <req-doc>     ← N 条验收标准  |  修改: <time>
      design.md     ←               |  修改: <time>
      tasks.md      ← N/M 已完成, P 待处理  |  修改: <time>
+     acceptance-checklist.md ← 验收操作清单 | 修改: <time>
    ```
-5. **Activate session**: run `spec_session.py continue <spec-dir> --session <id>` to update the active pointer.
-6. **Output footer** and await user instruction.
+6. **Activate session**: run `spec_session.py continue <spec-dir> --session <id>` to update the active pointer.
+7. **Output footer** and await user instruction. Do not start tasks, run validation, or judge whether `acceptance-checklist.md` has passed.
 
 ## 10. Boundary Anti-contamination Rules
 
@@ -380,15 +384,20 @@ python3 scripts/spec_choice.py --title "是否开始执行 tasks？" \
 
 ## Context Loading for /spec-continue — Full Protocol
 
-When the user triggers `/spec-continue`, all six steps are mandatory and must not be skipped or silenced:
+When the user triggers `/spec-continue`, all steps are mandatory and must not be skipped or silenced. This command only restores context and shows current state.
 
-1. Resolve the target spec using the first match found:
-   a. Spec name or path provided by the user.
-   b. Active pointer in `.active-spec-mode.json` for the current session.
-   c. Scan the document root for all subdirectories that contain a `.config.json` — these are all available specs, regardless of whether they were created in one-shot or persistent mode. Present the list and ask the user to choose.
-2. Validate `specId` consistency: read `.config.json` in the resolved spec dir. If an active pointer exists for this session, verify `specId` matches. If they differ, stop and report a boundary error — do not proceed. If no active pointer exists (e.g. one-shot spec), skip this check and proceed.
-3. Run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
-4. Present the loaded context to the user clearly:
+1. Resolve the configured spec root by running `python3 scripts/spec_vault.py get --json --configured-only`.
+   - Use only `specRoot` from `~/.config/spec-mode/config.json`.
+   - This root may come from `/spec --set-vault` or `/spec --set-root`.
+   - Do not auto-detect Obsidian here.
+   - Do not fall back to `<current-project>/specs` or `~/new project/specs`.
+2. Resolve the target spec using the first match found:
+   a. Spec name provided by the user, matched only against child directories under the configured root.
+   b. Active pointer in `<configured-root>/.active-spec-mode.json` for the current session.
+   c. Scan the configured root with `python3 scripts/spec_session.py list-specs --root <configured-root>` and ask the user to choose.
+3. Validate `specId` consistency: read `.config.json` in the resolved spec dir. If an active pointer exists for this session, verify `specId` matches. If they differ, stop and report a boundary error — do not proceed. If no active pointer exists (e.g. one-shot spec), skip this check and proceed.
+4. Run `python3 scripts/spec_session.py load <spec-dir>` and capture the output.
+5. Present the loaded context to the user clearly:
    ```
    已加载 spec: <slug>
      specId:  <id>
@@ -398,9 +407,10 @@ When the user triggers `/spec-continue`, all six steps are mandatory and must no
      <req-doc>     ← N 条验收标准  |  修改: <time>
      design.md     ←               |  修改: <time>
      tasks.md      ← N/M 已完成, P 待处理  |  修改: <time>
+     acceptance-checklist.md ← 验收操作清单 | 修改: <time>
    ```
-5. Activate the persistent session and output the footer.
-6. Only then respond to the user's actual request or await instructions.
+6. Activate the persistent session and output the footer.
+7. Stop and wait for the user's next input. Do not respond to older task requests, start implementation, run validation, or evaluate acceptance-checklist completion.
 
 The spec documents are the cross-session memory; loading them is how continuity works.
 
