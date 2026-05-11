@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,52 +17,38 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / "assets" / "templates"
 
 
-def slugify(value: str) -> str:
+SLUG_INVALID = re.compile(r"[^a-z0-9-]+")
+
+
+def normalize_slug(value: str) -> str:
+    """Format-normalize a slug. Does not infer semantics from Chinese; agent must
+    pass a semantically meaningful English slug via --name."""
     value = value.strip().lower()
-    replacements = {
-        "撤销": "undo",
-        "重做": "redo",
-        "登录": "login",
-        "注册": "register",
-        "用户": "user",
-        "需求": "requirement",
-        "修复": "fix",
-        "错误": "bug",
-        "项目": "project",
-    }
-    for source, target in replacements.items():
-        value = value.replace(source, f" {target} ")
-    value = re.sub(r"[^a-z0-9]+", "-", value)
+    value = SLUG_INVALID.sub("-", value)
     value = re.sub(r"-+", "-", value).strip("-")
-    return (value[:64].strip("-") or "new-spec")
+    return value[:64]
 
 
-def infer_name(text: str, explicit: str | None) -> tuple[str, str]:
-    if explicit:
-        slug = slugify(explicit)
-        return explicit.strip(), slug
+def resolve_document_root(root: str | None) -> tuple[Path, str]:
+    """Three-tier resolution: --root → SPEC_MODE_ROOT/config → Obsidian.
 
-    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "new spec")
-    first_line = re.sub(r"^/spec\s+", "", first_line).strip()
-    first_line = re.sub(r"[/\\:*?\"<>|]+", " ", first_line)
-    words = first_line[:80].strip()
-    slug = slugify(words)
-    return words or slug, slug
-
-
-def resolve_document_root(root: str | None, project_dir: str | None) -> tuple[Path, str]:
-    """Return (resolved_root, source_tag)."""
+    Returns (resolved_root, source_tag). On total failure raises SystemExit with
+    a guidance message and a JSON error code on stderr for agent consumption.
+    """
     if root:
         return Path(root).expanduser().resolve(), "explicit"
     vault_root, source = spec_vault.resolve_spec_root()
     if vault_root is not None:
         return vault_root, source
-    if project_dir:
-        return Path(project_dir).expanduser().resolve() / "specs", "project"
-    cwd = Path.cwd().resolve()
-    if cwd != Path.home().resolve():
-        return cwd / "specs", "project"
-    return Path.home().resolve() / "new project" / "specs", "default"
+    raise SystemExit(json.dumps({
+        "error": "no_spec_root",
+        "message": (
+            "未检测到 Obsidian vault，且未配置 spec 根目录。请选择以下方式之一：\n"
+            "  1. 安装 Obsidian 后重试（推荐）\n"
+            "  2. /spec --set-vault <vault路径>\n"
+            "  3. /spec --set-root <自定义目录>"
+        ),
+    }, ensure_ascii=False))
 
 
 def read_source(args: argparse.Namespace) -> str:
@@ -92,14 +78,17 @@ def write_if_missing(path: Path, content: str, force: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Initialize a Kiro-style spec-mode document folder.")
     parser.add_argument("--root", help="Document management root. The script creates <root>/<name>/.")
-    parser.add_argument("--project-dir", help="Project directory. Used as <project-dir>/specs when --root is omitted.")
-    parser.add_argument("--name", help="Concrete requirement name.")
+    parser.add_argument("--name", required=True,
+                        help="Semantic slug (lowercase, hyphen-separated). The agent must compute and pass this; "
+                             "the script does not infer slugs from Chinese.")
+    parser.add_argument("--requirement-name", help="Display name for the spec. Defaults to --name.")
     parser.add_argument("--source-text", help="Requirement text, usually the text after /spec.")
     parser.add_argument("--source-file", help="Path to a requirement source document.")
     parser.add_argument("--workflow", choices=["requirements-first", "design-first", "bugfix"], default="requirements-first")
     parser.add_argument("--spec-type", choices=["feature", "bugfix"], default="feature")
     parser.add_argument("--persistent", action="store_true", help="Bind this spec to an active persistent session.")
     parser.add_argument("--session", help="Window/thread/session id for persistent mode.")
+    parser.add_argument("--agent", help="Agent name recorded into lock metadata when --persistent.")
     parser.add_argument(
         "--current-phase",
         choices=sorted(spec_session.PHASES - {"ended"}),
@@ -109,10 +98,19 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="Overwrite existing generated documents.")
     args = parser.parse_args()
 
-    source = read_source(args)
-    name, slug = infer_name(source, args.name)
+    slug = normalize_slug(args.name)
+    if not slug:
+        print(json.dumps({
+            "error": "invalid_name",
+            "message": "--name 必须是合法 slug（小写字母/数字/连字符），由 agent 根据需求语义生成。",
+        }, ensure_ascii=False), file=sys.stderr)
+        return 2
+
+    name = (args.requirement_name or args.name).strip()
     spec_type = "bugfix" if args.workflow == "bugfix" else args.spec_type
-    document_root, root_source = resolve_document_root(args.root, args.project_dir)
+
+    source = read_source(args)
+    document_root, root_source = resolve_document_root(args.root)
     spec_dir = document_root / slug
     spec_dir.mkdir(parents=True, exist_ok=True)
 
@@ -159,6 +157,10 @@ def main() -> int:
         "endedAt": None,
         "endedReason": None,
         "sessions": {},
+        "lock": None,
+        "evictedSessions": [],
+        "iterationRound": 0,
+        "iterationHistory": [],
     }
     config_path = spec_dir / ".config.json"
     if write_if_missing(config_path, json.dumps(config, ensure_ascii=False, indent=2) + "\n", args.force):
@@ -167,7 +169,13 @@ def main() -> int:
     session: dict[str, object] | None = None
     if args.persistent:
         current_config = json.loads(config_path.read_text(encoding="utf-8"))
+        current_config.setdefault("lock", None)
+        current_config.setdefault("evictedSessions", [])
         session_id = spec_session.normalize_session_id(args.session)
+        # Acquire lock before binding the session. New specs are unlocked, so
+        # this should never raise LockHeld; we use force=False on purpose.
+        spec_session._acquire(spec_dir, session_id, force=False, agent=args.agent)
+        current_config = json.loads(config_path.read_text(encoding="utf-8"))
         current_config = spec_session.update_config_session(
             spec_dir,
             current_config,
@@ -180,7 +188,6 @@ def main() -> int:
             spec_dir,
             current_config,
             session_id,
-            args.current_phase,
         )
         spec_session.save_active(document_root, active)
         session = {

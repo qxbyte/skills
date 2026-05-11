@@ -124,6 +124,26 @@ def configured_spec_root() -> tuple[Path | None, str]:
     return None, "not_found"
 
 
+def list_other_root_specs(current_root: Path) -> list[dict[str, object]]:
+    """Look for spec folders living under known historical fallback locations.
+
+    Used to warn users after `--set-root` / `--set-vault` so they know specs
+    created under the old root are not auto-migrated.
+    """
+    candidates: list[Path] = []
+    cwd = Path.cwd().resolve()
+    candidates.append(cwd / "specs")
+    candidates.append(Path.home() / "new project" / "specs")
+    seen: list[dict[str, object]] = []
+    for candidate in candidates:
+        if not candidate.exists() or candidate.resolve() == current_root.resolve():
+            continue
+        for child in sorted(candidate.iterdir()):
+            if child.is_dir() and (child / ".config.json").exists():
+                seen.append({"slug": child.name, "path": str(child)})
+    return seen
+
+
 def command_detect(args: argparse.Namespace) -> int:
     config_path = obsidian_config_path()
     vaults = read_vaults()
@@ -147,9 +167,10 @@ def command_detect(args: argparse.Namespace) -> int:
         print("未检测到 Obsidian 安装，或没有已注册的 vault。")
         print(f"  Obsidian 配置路径: {config_path}")
         print()
-        print("未安装 Obsidian 或使用命令指定目录：")
-        print("  python3 scripts/spec_vault.py set --vault /path/to/vault")
-        print("  python3 scripts/spec_vault.py set --root  /path/to/spec/root")
+        print("请选择以下方式之一：")
+        print("  1. 安装 Obsidian 后重试（推荐）")
+        print("  2. /spec --set-vault <vault路径>")
+        print("  3. /spec --set-root <自定义目录>")
     else:
         print(f"检测到 {len(vaults)} 个 vault：")
         for v in vaults:
@@ -187,7 +208,18 @@ def command_set(args: argparse.Namespace) -> int:
 
     write_config(cfg)
     print(f"\n配置已保存至: {CONFIG_FILE}")
-    print("  (此后每次 /spec 自动使用此路径，无需重复设置)")
+    print("  (此后每次 /spec 自动使用此路径；任何时候可再次运行 set 修改)")
+
+    new_root = Path(cfg["obsidianRoot"]).expanduser().resolve()
+    others = list_other_root_specs(new_root)
+    if others:
+        print()
+        print(f"⚠ 检测到旧位置仍有 {len(others)} 个 spec（不会自动迁移）：")
+        for entry in others[:10]:
+            print(f"    - {entry['slug']}   {entry['path']}")
+        if len(others) > 10:
+            print(f"    ... 还有 {len(others) - 10} 个")
+        print("  如需迁移，请手动 mv 并更新各 spec 的 .config.json.documentRoot 字段。")
     return 0
 
 
@@ -216,13 +248,21 @@ def command_get(args: argparse.Namespace) -> int:
     if root:
         print(f"spec 文档根目录: {root}")
         print(f"来源: {source_labels.get(source, source)}")
+        others = list_other_root_specs(root)
+        if others:
+            print()
+            print(f"⚠ 旧位置仍有 {len(others)} 个 spec（不会自动迁移）：")
+            for entry in others[:10]:
+                print(f"    - {entry['slug']}   {entry['path']}")
+            if len(others) > 10:
+                print(f"    ... 还有 {len(others) - 10} 个")
     else:
         print("未配置 spec 文档根目录。")
-        print("将回退到 <项目>/specs 或 ~/new project/specs。")
         print()
-        print("未安装 Obsidian 或使用命令指定：")
-        print("  python3 scripts/spec_vault.py set --vault /path/to/vault")
-        print("  python3 scripts/spec_vault.py set --root  /path/to/dir")
+        print("请选择以下方式之一：")
+        print("  1. 安装 Obsidian 后重试（推荐）")
+        print("  2. /spec --set-vault <vault路径>")
+        print("  3. /spec --set-root <自定义目录>")
     print(f"配置文件: {CONFIG_FILE} ({'存在' if CONFIG_FILE.exists() else '不存在'})")
     return 0
 
