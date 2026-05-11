@@ -62,23 +62,20 @@ agent 在持久 session 中必须在以下时机调 `heartbeat`：
 ## /spec-continue 接管流程
 
 ```
-用户：/spec-continue login-feature
+用户：/spec-continue <slug>
 
 代码：
   1. 解析 slug → spec_dir
   2. acquire(currentSession)
      成功 → 进入 spec
-     失败（LockHeld）→ 输出三选项：
-        ⚠ spec "login-feature" 当前在 session TERM_SESSION_C3D4 中处理
-          最后活动: <相对时间>
-        请选择：
-          1. 强制接管（驱逐另一窗口）
-          2. 切换到只读模式查看
-          3. 取消
-  3. 选 1 → acquire --force
-     选 2 → 加载文档不调 acquire，footer 标记 [只读]
-     选 3 → 退出
+     失败（LockHeld）→ 先向用户输出锁状态摘要（持有者 sessionId + 最后活动时间），
+                    然后运行 `references/prompts.md` 中的「/spec-continue 接管」选择器：
+                       - 强制接管 → acquire --force
+                       - 只读查看 → 加载文档但不 acquire，footer 标记 [只读]
+                       - 取消     → 退出
 ```
+
+接管选择器命令、措辞、推荐项见 `references/prompts.md`（统一选择器命令节）。
 
 ## 被驱逐窗口的行为
 

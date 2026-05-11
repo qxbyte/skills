@@ -64,6 +64,33 @@ These rules trigger detectable signals (lint, `/spec-continue` ⚠ markers, veri
 
 If the text after `/spec` is an existing file path, read it as the requirement source; otherwise treat it as the requirement description.
 
+**Optional spec name prefix.** If the requirement starts with `<名称>：<内容>` (full-width `：`) or `<名称>: <内容>` (ASCII `:` followed by a space), split on the first colon:
+
+- The part **before** the colon is the **spec folder name hint**. Agent derives a semantic English slug from the hint and passes `spec_init.py --name <slug> --requirement-name "<原名称>"`. The original hint is preserved as the displayed `requirementName` in `.config.json`.
+- The part **after** the colon is the requirement source text.
+- Skip the split if the prefix looks like a path (contains `/` or `\`), a URL, or no colon appears in the first ~30 chars.
+- No colon → whole text is the requirement; agent infers the slug from the requirement content as before.
+
+## Pre-requirements Clarification (Plan-mode)
+
+Before generating `requirements.md` / `bugfix.md`, evaluate whether the user's requirement is unambiguous enough to translate into EARS SHALL statements **without invention**.
+
+- **Clear enough** → proceed to workflow selection and document generation.
+- **Real ambiguity** affecting scope, behavior, UX, data, validation, or acceptance → enter clarification dialogue first. Phase stays in `intake`. **Do not write any spec document yet.**
+
+Clarification dialogue protocol:
+
+1. Output the questions using **Template B** (开放式澄清问答) in `references/prompts.md`. Each question is labeled `【阻塞】` or `【可延后】`. Aim for ≤5 blocking items per round.
+2. End the turn. Wait for the user's reply.
+3. After the user answers, parse the response and run the **澄清完成** selector (Template A in `references/prompts.md`):
+   - `进入下一阶段` → proceed to workflow selection and document generation. Carry resolved answers into the document; unresolved items go to the `待确认问题` section.
+   - `继续澄清` → ask the next round of questions using Template B again.
+4. Never invent missing scope, business rules, UI behavior, data fields, or acceptance criteria.
+
+This is the spec-mode equivalent of agent "Plan mode": converge on intent through dialogue before any file is written.
+
+→ 详见 `references/prompts.md`（所有 prompt 输出模板、统一选择器命令、措辞禁忌）
+
 ## Document Root Resolution (Iron Law)
 
 Three-tier resolution. **No project fallback, no home fallback.**
@@ -207,6 +234,7 @@ When `/spec -h` / `/spec-mode -h` is triggered, output exactly `references/help-
 ## References
 
 - `references/workflow.md` — full phase protocol, interactive selector commands, `/spec-continue` context loading, EARS examples
+- `references/prompts.md` — **unified prompt templates** (selector usage, clarification format, list view, forbidden phrasings)
 - `references/iteration.md` — iteration phase, sub-loop, document accumulation rules
 - `references/lock-protocol.md` — lock mechanism, takeover, read-only mode, eviction
 - `references/obsidian.md` — vault detection, directory tree, config.json lifecycle

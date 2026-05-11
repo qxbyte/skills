@@ -8,6 +8,7 @@ spec-mode 命令速查
 
 工作流
   /spec <需求描述或文件路径>            一次性规格工作流（需求→设计→任务）
+  /spec <名称>：<需求描述>              指定 spec 文件夹名（支持 ： 或 ": "）
   /spec-mode <需求描述或文件路径>       同 /spec
   /spec --persist <需求>               启动持久会话模式
   /spec-continue [spec-slug]            列出可继续的 spec，或恢复 / 切换到指定 spec

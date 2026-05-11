@@ -23,9 +23,10 @@ Intake rules:
 
 - If `<requirement-or-path>` points to a readable file, summarize it and use it as the source.
 - If it is prose, use it directly.
+- **Spec name prefix parsing**: detect a leading `<名称>：<内容>` (full-width 冒号) or `<名称>: <内容>` (ASCII 冒号 + 空格) within the first ~30 chars; **不**对路径 / URL / 无冒号输入做拆分。匹配则：`<名称>` 作为 slug 来源（非英文需 agent 自行派生语义 slug，原文保留为 `requirementName`），`<内容>` 作为需求源文本。否则整段都是需求，agent 自行从内容推断 slug。
 - Extract requirement name (semantic English slug — see §1.2), root hints, workflow hints, constraints, validation expectations.
 - If the user only gives a root and no requirement, ask for the requirement.
-- Do not invent missing scope, business rules, UI behavior, data fields, acceptance criteria, or validation commands. Ask when those affect the result.
+- **Pre-requirements clarification (Plan-mode)**: if the requirement has real ambiguity affecting scope, behavior, UX, data, validation, or acceptance, stay in `intake` phase and enter a clarification dialogue **before** writing any document. Do not invent missing details. Group questions compactly (≤5), end the turn, wait for user reply. After resolution, proceed to workflow selection. → 详见 SKILL.md §Pre-requirements Clarification。
 - Group unclear points into a compact confirmation list before generating the next document.
 
 Persistent command rules:
@@ -64,7 +65,7 @@ If `--name` is missing or normalizes to empty, `spec_init.py` exits with `invali
 
 ## 2. Workflow Choice Prompt
 
-When workflow is unclear, present a compact choice prompt.
+When workflow is unclear, present the **Workflow 类型选择** selector from `references/prompts.md`.
 
 | Option | When |
 |---|---|
@@ -72,47 +73,23 @@ When workflow is unclear, present a compact choice prompt.
 | Technical Design | Architecture / low-level design / non-functional constraints are primary |
 | Bugfix | Defect / regression / failing test / incident |
 
-Use `scripts/spec_choice.py` when interactive; numbered fallback if not.
-
-```text
-python3 scripts/spec_choice.py --title "What do you want to start with?" \
-  --option "Requirements::Begin by gathering and documenting requirements::recommended" \
-  --option "Technical Design::Begin with the technical design, then derive requirements" \
-  --option "Bugfix::Document current, expected, and unchanged behavior"
-```
-
 ## 2.1 Document Confirmation Prompt
 
 After every generated document, in the **same response**:
 
 1. Do not paste the full document by default — rely on the client's file diff preview.
 2. Show file path, concise summary, key changes, unresolved questions.
-3. Show confirmation options (selector preferred):
-
-```text
-python3 scripts/spec_choice.py --title "确认 requirements.md？" \
-  --option "确认::继续生成下一阶段文档::recommended" \
-  --option "查看全文::在聊天中展示完整文档" \
-  --option "继续沟通::先根据反馈修改当前文档"
-```
-
+3. Run the **文档确认** selector from `references/prompts.md`.
 4. **End the turn.**
 
 Rules:
 
 - `确认` → next phase
-- `查看全文` → print full document, then re-show options
-- `继续沟通` → apply feedback, re-show summary + options
+- `查看全文` → print full document, then re-show selector
+- `继续沟通` → apply feedback, re-show summary + selector
 - Repeat until `确认`
 
-After `tasks.md` is confirmed:
-
-```text
-python3 scripts/spec_choice.py --title "是否开始执行 tasks？" \
-  --option "开始 required tasks::只执行必需任务::recommended" \
-  --option "开始 required + optional tasks::执行必需任务和可选任务" \
-  --option "暂不 coding::只保留文档，不开始实现"
-```
+After `tasks.md` is confirmed, run the **任务执行** selector from `references/prompts.md`.
 
 ## 3. Directory Resolution
 
@@ -220,13 +197,10 @@ Final acceptance must include:
 - Remaining risks or open questions
 - If persistent: footer with `/spec-end`
 
-When all required checklist rows have `结论 = 通过` and user inputs `/spec-accept` (or chooses "验收通过"), run:
+When all required checklist rows have `结论 = 通过`, agent runs the **验收通过** selector from `references/prompts.md`:
 
-```bash
-python3 scripts/spec_session.py iterate <spec-dir>
-```
-
-→ `iterationRound` increments, phase becomes `iteration`.
+- `验收通过` → run `python3 scripts/spec_session.py iterate <spec-dir>` → `iterationRound` 自增、phase 变为 `iteration`
+- `继续修改` → 留在 `acceptance` 阶段调整 checklist 或回滚到 `implementation`
 
 ## 9. `/spec-continue` — Context Loading + Multi-Window
 
@@ -244,25 +218,7 @@ Steps:
    - If no configured root → ask user to run `/spec --set-vault` or `/spec --set-root` and stop
 2. List specs: `python3 scripts/spec_session.py list-specs --root <root> --json`
 3. List sessions: `python3 scripts/spec_session.py list --root <root> --json`
-4. Present three-group view:
-
-```
-可继续的需求规格
-配置根目录：/Volumes/External HD/.../specs
-
-当前会话 (session: <id>)
-  ► <slug>     <name>       <phase>    <m/n 任务>    ✓持有锁
-
-其他窗口
-    <slug>     <name>       <phase>    <m/n 任务>    ⚠ 锁定于 <other-id>
-
-可继续的全部 specs
-  1. <slug>     <name>       <phase>    <m/n 任务>    <lock state>
-  2. ...
-
-请选择要继续的需求 [1-N] 或输入 spec 名：
-```
-
+4. Present using **Template C — List + Numeric Selection** in `references/prompts.md` (三段固定：当前会话 / 其他窗口 / 可继续的全部 specs；锁状态用固定词；结束语固定)
 5. After user picks → run 9.2 with that slug
 
 ### 9.2 With slug
@@ -276,8 +232,8 @@ Steps:
 1. Resolve `spec_dir = <root>/<slug>`
 2. `python3 scripts/spec_session.py acquire <spec-dir> --session <id>`
    - **Exit 0** → owned, proceed to step 3
-   - **Exit 4 (LockHeld)** → output 3-choice prompt (强制接管 / 只读查看 / 取消)
-     - `强制接管` → `acquire --force`, warn that previous session evicted
+   - **Exit 4 (LockHeld)** → 输出锁状态摘要，运行 **`/spec-continue` 接管** 选择器（见 `references/prompts.md`）
+     - `强制接管` → `acquire --force`, warn that previous session was evicted
      - `只读查看` → skip acquire, set read-only flag; do **not** update active-pointer's specSlug binding
      - `取消` → exit
 3. `python3 scripts/spec_session.py load <spec-dir> --session <id>` — capture output
@@ -367,12 +323,15 @@ If user asks for one-pass generation, still show paths, summaries, key changes p
 
 ## Interactive Selectors (Reference)
 
-Run at each decision point in a TTY (↑/↓ + Enter). Fall back to numbered choices if `spec_choice.py` exits with code 2.
+Run at each decision point in a TTY (↑/↓ + Enter). Fall back to numbered choices only when `spec_choice.py` exits with code 2.
 
-**Workflow type** (before first document) — see §2 command block.
+All selector command blocks live in `references/prompts.md` — copy-paste them verbatim:
 
-**Document confirmation** (after generating or updating each document — replace filename in title) — see §2.1 command block.
+- Workflow 类型选择
+- 文档确认（每份 spec 文档生成后）
+- 任务执行（tasks.md 确认后）
+- `/spec-continue` 接管（spec 已被锁定时）
+- 澄清完成（Plan-mode 结束）
+- 验收通过（acceptance 完成时）
 
-**Task execution** (after `tasks.md` is confirmed) — see §2.1 second command block.
-
-Selectors are preferred over plain-text confirmation. Use plain text only when tool execution is unavailable.
+Selectors are preferred over plain-text confirmation. Use plain text only when tool execution is unavailable. **Forbidden phrasings** (`够了`、`差不多`、`随便选` 等口语词) are listed at the bottom of `references/prompts.md`.
