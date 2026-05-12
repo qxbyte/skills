@@ -46,9 +46,14 @@ def choose_numbered(title: str, options: list[Option], default: int) -> int:
         value = input(prompt).strip()
     except EOFError:
         # stdin is not a real terminal (e.g. Claude Code Bash tool).
-        # Refuse to auto-select — the agent must show options as text and wait for a real reply.
-        print("\n[spec-mode] 非交互环境：无法获取用户输入。请在对话中回复选项编号。", file=sys.stderr)
-        raise SystemExit(2)
+        # This is an EXPECTED path under CLI coding agents: print the option block
+        # plus a machine-readable sentinel on stdout, and exit 0.
+        # The agent must relay the stdout block to the user verbatim and end the turn.
+        sys.stdout.write("\n")
+        sys.stdout.write("[spec-mode:non-interactive] 选项已就绪：请把上方选项原样转发给用户，并在对话中等待编号回复。\n")
+        sys.stdout.write("[spec-mode:non-interactive] AWAITING_USER_CHOICE\n")
+        sys.stdout.flush()
+        raise SystemExit(0)
     if not value and default >= 0:
         return default
     if value.isdigit():
