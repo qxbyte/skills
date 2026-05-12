@@ -184,7 +184,7 @@ Phase order (no skipping confirmations):
 
 Confirmation protocol — for every phase boundary, in the same response:
 1. Show the document path, summary, key changes, unresolved questions
-2. Show confirmation options (via `scripts/spec_choice.py`; fall back to numbered list if exit code 2)
+2. Show confirmation options via `scripts/spec_choice.py`. In a non-interactive shell (Claude Code Bash, CI) the script prints the option block + `AWAITING_USER_CHOICE` sentinel on stdout and exits 0 — relay the stdout block to the user **verbatim** and end the turn. Never re-run the script to "retry" the prompt.
 3. **End the turn.** Never proceed in the same response.
 
 Auto-selecting a default at a phase gate is never acceptable.
@@ -218,7 +218,7 @@ Classify the request before creating documents:
 - Feature, architecture-first → **Technical Design first**
 - Bug / regression / failing test → **Bugfix**
 
-Use `scripts/spec_choice.py` when the workflow matters and is unclear; fall back to numbered choices if non-interactive. Never silently choose for the user.
+Use `scripts/spec_choice.py` when the workflow matters and is unclear. In non-interactive shells the script outputs the option block + `AWAITING_USER_CHOICE` sentinel and exits 0 — relay stdout to the user and end the turn. Never silently choose for the user.
 
 ## Output Language
 
@@ -238,7 +238,7 @@ If the user's requirement is in English, generated spec documents may use Englis
 - `scripts/spec_vault.py` — detect / set --vault / set --root / get
 - `scripts/spec_lint.py` — validate spec files (now also lock-field + checklist-staleness checks)
 - `scripts/spec_status.py` — task-progress view (thin wrapper over `spec_session.py load --json`)
-- `scripts/spec_choice.py` — interactive selector (TTY) with numbered fallback
+- `scripts/spec_choice.py` — selector. TTY → curses ↑/↓ + Enter. Non-TTY (Claude Code Bash, CI) → prints option block + `AWAITING_USER_CHOICE` sentinel on stdout, exits 0; agent relays to user and ends turn.
 
 ## Help Output
 

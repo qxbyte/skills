@@ -282,7 +282,7 @@ Output order within each confirmation step (strictly follow):
 
 1. Generate or update the document (write the file)
 2. **First**: in agent's text — document path, concise summary, key changed points, unresolved questions
-3. **Then**: confirmation options (try `spec_choice.py`; if exit code 2 due to non-interactive stdin, output numbered options as plain text)
+3. **Then**: confirmation options via `spec_choice.py`. TTY → user picks in curses. Non-TTY → the script prints the option block + `AWAITING_USER_CHOICE` sentinel on stdout and exits 0; relay the stdout block to the user verbatim. Do **not** re-run the script to "retry" or restate the options yourself in different wording.
 4. **End the turn.** Do not continue to the next phase in the same response
 
 The user's next reply drives the next action:
@@ -323,7 +323,7 @@ If user asks for one-pass generation, still show paths, summaries, key changes p
 
 ## Interactive Selectors (Reference)
 
-Run at each decision point in a TTY (↑/↓ + Enter). Fall back to numbered choices only when `spec_choice.py` exits with code 2.
+Run at each decision point. In a TTY the script offers ↑/↓ + Enter. In a non-TTY shell (Claude Code Bash, CI) it prints the option block + `[spec-mode:non-interactive] AWAITING_USER_CHOICE` sentinel on stdout and exits 0; agent forwards the stdout block to the user and ends the turn. Do not invent your own option text — always run the script first.
 
 All selector command blocks live in `references/prompts.md` — copy-paste them verbatim:
 

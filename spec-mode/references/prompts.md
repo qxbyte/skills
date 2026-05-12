@@ -4,7 +4,12 @@ Unified format for all clarification / confirmation / selection outputs in spec-
 
 ## Selector Preference (Iron Rule)
 
-For any fixed-option decision (≤5 options), use `scripts/spec_choice.py` (curses ↑/↓ + Enter). Numbered text fallback is allowed **only** when the selector exits with code 2 (non-interactive stdin). Do **not** ask "请回复确认/继续/取消" in plain text when the selector is runnable.
+For any fixed-option decision (≤5 options), use `scripts/spec_choice.py`.
+
+- **TTY**: curses ↑/↓ + Enter; script writes the chosen label to stdout, exits 0.
+- **Non-TTY (Claude Code Bash, CI)**: script prints the option block + `[spec-mode:non-interactive] AWAITING_USER_CHOICE` sentinel on stdout, exits 0. Agent must forward the stdout block to the user verbatim and end the turn. **Do not** re-run the script in the same turn to "retry" or restate the options in your own words.
+
+Never ask "请回复确认/继续/取消" as plain text without running the script first — the script is the source of truth for option wording.
 
 ## Template A — Fixed-option Confirmation
 
